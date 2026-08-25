@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mailbox Packages</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --card-bg: #ffffff;
+    --border: #dfe3e8;
+    --text: #1f2430;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-dark: #1d4ed8;
+    --danger: #dc2626;
+    --danger-dark: #b91c1c;
+    --entry-bg: #f8f9fb;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 0 0 20px;
+  }
+  .sections {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+  }
+  .section {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    min-height: 120px;
+  }
+  .section h2 {
+    font-size: 15px;
+    margin: 0 0 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .add-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .add-row input {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  .add-row button {
+    padding: 8px 14px;
+    border: none;
+    border-radius: 6px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .add-row button:hover { background: var(--accent-dark); }
+  .entries {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .entry {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--entry-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+  }
+  .entry .number {
+    flex: 1;
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 4px;
+  }
+  .entry .number:hover { background: #eef1f5; }
+  .entry button {
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--border);
+    background: #fff;
+    border-radius: 5px;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text);
+  }
+  .entry button:hover { background: #eef1f5; }
+  .entry button.delete {
+    color: var(--danger);
+    border-color: #f3c7c7;
+  }
+  .entry button.delete:hover { background: #fdecec; }
+  .empty {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 6px 2px;
+  }
+
+  /* inline edit form */
+  .edit-form {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+  }
+  .edit-form input {
+    padding: 5px 7px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    font-size: 14px;
+  }
+  .edit-form input.number-field { width: 70px; }
+  .edit-form input.qty-field { width: 55px; }
+  .edit-form .save {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    padding: 5px 10px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .edit-form .save:hover { background: var(--accent-dark); }
+  .edit-form .cancel {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 5px 10px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .edit-form .cancel:hover { background: #eef1f5; }
+
+  /* undo toast */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: #1f2430;
+    color: #fff;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 100;
+  }
+  #toast.show {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+  }
+  #toast button {
+    background: none;
+    border: none;
+    color: #93c5fd;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+  <h1>Mailbox Packages</h1>
+  <div class="sections" id="sections"></div>
+  <div id="toast">
+    <span id="toast-msg"></span>
+    <button id="toast-undo">Undo</button>
+  </div>
+
+<script>
+(function () {
+  const STORAGE_KEY = "mailboxPackages_v1";
+  const DEFAULT_SECTIONS = ["USPS", "UPS", "FedEx", "DHL", "Amazon", "Other"];
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.sections) return parsed;
+      }
+    } catch (e) {}
+    const sections = {};
+    DEFAULT_SECTIONS.forEach(name => { sections[name] = []; });
+    return { sections };
+  }
+
+  let state = loadState();
+  let nextId = 1;
+  Object.values(state.sections).forEach(list => {
+    list.forEach(e => { if (e.id >= nextId) nextId = e.id + 1; });
+  });
+
+  function save() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {}
+  }
+
+  function sortSection(name) {
+    state.sections[name].sort((a, b) =>
+      a.number.localeCompare(b.number, undefined, { numeric: true, sensitivity: "base" })
+    );
+  }
+
+  function render() {
+    const container = document.getElementById("sections");
+    container.innerHTML = "";
+    Object.keys(state.sections).forEach(name => {
+      const section = document.createElement("div");
+      section.className = "section";
+
+      const heading = document.createElement("h2");
+      heading.textContent = name;
+      section.appendChild(heading);
+
+      const addRow = document.createElement("div");
+      addRow.className = "add-row";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.placeholder = "Mailbox #";
+      input.inputMode = "numeric";
+      const addBtn = document.createElement("button");
+      addBtn.textContent = "Add";
+      const doAdd = () => {
+        const value = input.value.trim();
+        if (!value) return;
+        addPackage(name, value);
+        input.value = "";
+        input.focus();
+      };
+      addBtn.addEventListener("click", doAdd);
+      input.addEventListener("keydown", e => { if (e.key === "Enter") doAdd(); });
+      addRow.appendChild(input);
+      addRow.appendChild(addBtn);
+      section.appendChild(addRow);
+
+      const entriesEl = document.createElement("div");
+      entriesEl.className = "entries";
+
+      const list = state.sections[name];
+      if (list.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "No packages";
+        entriesEl.appendChild(empty);
+      } else {
+        list.forEach(entry => {
+          entriesEl.appendChild(renderEntry(name, entry));
+        });
+      }
+
+      section.appendChild(entriesEl);
+      container.appendChild(section);
+    });
+  }
+
+  function renderEntry(sectionName, entry) {
+    const row = document.createElement("div");
+    row.className = "entry";
+
+    const label = document.createElement("div");
+    label.className = "number";
+    label.textContent = entry.qty > 1 ? `${entry.number}.${entry.qty}` : entry.number;
+    label.title = "Tap to edit";
+    label.addEventListener("click", () => startEdit(sectionName, entry.id, row));
+    row.appendChild(label);
+
+    const minusBtn = document.createElement("button");
+    minusBtn.textContent = "−";
+    minusBtn.addEventListener("click", () => changeQty(sectionName, entry.id, -1));
+    row.appendChild(minusBtn);
+
+    const plusBtn = document.createElement("button");
+    plusBtn.textContent = "+";
+    plusBtn.addEventListener("click", () => changeQty(sectionName, entry.id, 1));
+    row.appendChild(plusBtn);
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "delete";
+    delBtn.textContent = "✕";
+    delBtn.title = "Delete";
+    delBtn.addEventListener("click", () => deleteEntry(sectionName, entry.id));
+    row.appendChild(delBtn);
+
+    return row;
+  }
+
+  function startEdit(sectionName, id, row) {
+    const entry = state.sections[sectionName].find(e => e.id === id);
+    if (!entry) return;
+
+    row.innerHTML = "";
+    const form = document.createElement("div");
+    form.className = "edit-form";
+
+    const numberInput = document.createElement("input");
+    numberInput.className = "number-field";
+    numberInput.type = "text";
+    numberInput.value = entry.number;
+
+    const qtyInput = document.createElement("input");
+    qtyInput.className = "qty-field";
+    qtyInput.type = "number";
+    qtyInput.min = "1";
+    qtyInput.value = entry.qty;
+
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "save";
+    saveBtn.textContent = "Save";
+    saveBtn.addEventListener("click", () => commitEdit(sectionName, id, numberInput.value, qtyInput.value));
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.className = "cancel";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", render);
+
+    form.appendChild(numberInput);
+    form.appendChild(qtyInput);
+    form.appendChild(saveBtn);
+    form.appendChild(cancelBtn);
+    row.appendChild(form);
+    numberInput.focus();
+  }
+
+  function commitEdit(sectionName, id, newNumberRaw, newQtyRaw) {
+    const newNumber = newNumberRaw.trim();
+    if (!newNumber) return;
+    let newQty = parseInt(newQtyRaw, 10);
+    if (isNaN(newQty) || newQty < 1) newQty = 1;
+
+    const list = state.sections[sectionName];
+    const entry = list.find(e => e.id === id);
+    if (!entry) return;
+
+    const duplicate = list.find(e => e.id !== id && e.number === newNumber);
+    if (duplicate) {
+      duplicate.qty += newQty;
+      const idx = list.indexOf(entry);
+      list.splice(idx, 1);
+    } else {
+      entry.number = newNumber;
+      entry.qty = newQty;
+    }
+
+    sortSection(sectionName);
+    save();
+    render();
+  }
+
+  function addPackage(sectionName, number) {
+    const list = state.sections[sectionName];
+    const existing = list.find(e => e.number === number);
+    if (existing) {
+      existing.qty += 1;
+    } else {
+      list.push({ id: nextId++, number, qty: 1 });
+    }
+    sortSection(sectionName);
+    save();
+    render();
+  }
+
+  function changeQty(sectionName, id, delta) {
+    const entry = state.sections[sectionName].find(e => e.id === id);
+    if (!entry) return;
+    entry.qty = Math.max(1, entry.qty + delta);
+    save();
+    render();
+  }
+
+  let pendingDelete = null;
+  let toastTimer = null;
+
+  function deleteEntry(sectionName, id) {
+    const list = state.sections[sectionName];
+    const idx = list.findIndex(e => e.id === id);
+    if (idx === -1) return;
+    const [removed] = list.splice(idx, 1);
+    save();
+    render();
+    showUndoToast(sectionName, removed);
+  }
+
+  function showUndoToast(sectionName, entry) {
+    pendingDelete = { sectionName, entry };
+    const toast = document.getElementById("toast");
+    const msg = document.getElementById("toast-msg");
+    msg.textContent = `Deleted mailbox ${entry.number} from ${sectionName}`;
+    toast.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toast.classList.remove("show");
+      pendingDelete = null;
+    }, 5000);
+  }
+
+  document.getElementById("toast-undo").addEventListener("click", () => {
+    if (!pendingDelete) return;
+    const { sectionName, entry } = pendingDelete;
+    state.sections[sectionName].push(entry);
+    sortSection(sectionName);
+    save();
+    render();
+    document.getElementById("toast").classList.remove("show");
+    clearTimeout(toastTimer);
+    pendingDelete = null;
+  });
+
+  Object.keys(state.sections).forEach(sortSection);
+  render();
+})();
+</script>
+</body>
+</html>
