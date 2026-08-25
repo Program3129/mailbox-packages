@@ -43,12 +43,58 @@
     flex-direction: column;
     min-height: 120px;
   }
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
   .section h2 {
     font-size: 15px;
-    margin: 0 0 10px;
+    margin: 0;
     color: var(--muted);
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .section h2:hover { background: #eef1f5; }
+  .section-remove {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--border);
+    background: #fff;
+    border-radius: 5px;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--danger);
+  }
+  .section-remove:hover { background: #fdecec; }
+  .rename-form {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+  }
+  .rename-form input {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 7px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    font-size: 14px;
   }
   .add-row {
     display: flex;
@@ -110,6 +156,7 @@
     align-items: center;
     justify-content: center;
     color: var(--text);
+    flex-shrink: 0;
   }
   .entry button:hover { background: #eef1f5; }
   .entry button.delete {
@@ -123,7 +170,7 @@
     padding: 6px 2px;
   }
 
-  /* inline edit form */
+  /* inline edit form (entries) */
   .edit-form {
     display: flex;
     align-items: center;
@@ -138,7 +185,8 @@
   }
   .edit-form input.number-field { width: 70px; }
   .edit-form input.qty-field { width: 55px; }
-  .edit-form .save {
+  .edit-form .save,
+  .rename-form .save {
     background: var(--accent);
     color: #fff;
     border: none;
@@ -146,17 +194,64 @@
     padding: 5px 10px;
     font-size: 13px;
     cursor: pointer;
+    flex-shrink: 0;
   }
-  .edit-form .save:hover { background: var(--accent-dark); }
-  .edit-form .cancel {
+  .edit-form .save:hover,
+  .rename-form .save:hover { background: var(--accent-dark); }
+  .edit-form .cancel,
+  .rename-form .cancel {
     background: none;
     border: 1px solid var(--border);
     border-radius: 5px;
     padding: 5px 10px;
     font-size: 13px;
     cursor: pointer;
+    flex-shrink: 0;
   }
-  .edit-form .cancel:hover { background: #eef1f5; }
+  .edit-form .cancel:hover,
+  .rename-form .cancel:hover { background: #eef1f5; }
+
+  /* add-section card */
+  .add-section {
+    background: transparent;
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 120px;
+  }
+  .add-section-trigger {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 8px;
+  }
+  .add-section-trigger:hover { color: var(--text); }
+  .add-section-form {
+    display: flex;
+    gap: 8px;
+  }
+  .add-section-form input {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  .add-section-form button {
+    padding: 8px 14px;
+    border: none;
+    border-radius: 6px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+  }
 
   /* undo toast */
   #toast {
@@ -176,6 +271,7 @@
     pointer-events: none;
     transition: opacity 0.2s ease, transform 0.2s ease;
     z-index: 100;
+    max-width: calc(100vw - 32px);
   }
   #toast.show {
     opacity: 1;
@@ -189,6 +285,44 @@
     font-size: 14px;
     cursor: pointer;
     font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  /* mobile: optimized for ~4 sections in a 2x2 grid */
+  @media (max-width: 640px) {
+    body { padding: 12px; }
+    h1 { font-size: 18px; margin-bottom: 12px; }
+    .sections {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .section, .add-section {
+      padding: 8px;
+      min-height: 0;
+      min-width: 0;
+    }
+    .section h2 { font-size: 12px; }
+    .section-header { margin-bottom: 6px; }
+    .add-row { margin-bottom: 6px; gap: 4px; }
+    .add-row input {
+      padding: 8px 6px;
+      font-size: 13px;
+      min-width: 0;
+    }
+    .add-row button {
+      padding: 8px 10px;
+      font-size: 13px;
+    }
+    .entries { gap: 4px; }
+    .entry { padding: 5px 4px; gap: 4px; }
+    .entry .number { font-size: 13px; padding: 6px 4px; }
+    .entry button {
+      width: 30px;
+      height: 30px;
+      font-size: 14px;
+    }
+    .edit-form input.number-field { width: 50px; }
+    .edit-form input.qty-field { width: 40px; }
   }
 </style>
 </head>
@@ -202,26 +336,41 @@
 
 <script>
 (function () {
-  const STORAGE_KEY = "mailboxPackages_v1";
+  const STORAGE_KEY = "mailboxPackages_v2";
   const DEFAULT_SECTIONS = ["USPS", "UPS", "FedEx", "DHL", "Amazon", "Other"];
+
+  let nextSectionId = 1;
+  let nextEntryId = 1;
 
   function loadState() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && parsed.sections) return parsed;
+        if (parsed && Array.isArray(parsed.sections)) return parsed;
+      }
+      // migrate from v1 (object-keyed sections)
+      const oldRaw = localStorage.getItem("mailboxPackages_v1");
+      if (oldRaw) {
+        const oldParsed = JSON.parse(oldRaw);
+        if (oldParsed && oldParsed.sections && !Array.isArray(oldParsed.sections)) {
+          const sections = Object.keys(oldParsed.sections).map(name => ({
+            id: nextSectionId++,
+            name,
+            entries: oldParsed.sections[name]
+          }));
+          return { sections };
+        }
       }
     } catch (e) {}
-    const sections = {};
-    DEFAULT_SECTIONS.forEach(name => { sections[name] = []; });
+    const sections = DEFAULT_SECTIONS.map(name => ({ id: nextSectionId++, name, entries: [] }));
     return { sections };
   }
 
   let state = loadState();
-  let nextId = 1;
-  Object.values(state.sections).forEach(list => {
-    list.forEach(e => { if (e.id >= nextId) nextId = e.id + 1; });
+  state.sections.forEach(section => {
+    if (section.id >= nextSectionId) nextSectionId = section.id + 1;
+    section.entries.forEach(e => { if (e.id >= nextEntryId) nextEntryId = e.id + 1; });
   });
 
   function save() {
@@ -230,8 +379,12 @@
     } catch (e) {}
   }
 
-  function sortSection(name) {
-    state.sections[name].sort((a, b) =>
+  function getSection(sectionId) {
+    return state.sections.find(s => s.id === sectionId);
+  }
+
+  function sortSection(sectionId) {
+    getSection(sectionId).entries.sort((a, b) =>
       a.number.localeCompare(b.number, undefined, { numeric: true, sensitivity: "base" })
     );
   }
@@ -239,56 +392,177 @@
   function render() {
     const container = document.getElementById("sections");
     container.innerHTML = "";
-    Object.keys(state.sections).forEach(name => {
-      const section = document.createElement("div");
-      section.className = "section";
+    state.sections.forEach(section => {
+      container.appendChild(renderSection(section));
+    });
+    container.appendChild(renderAddSection());
+  }
 
-      const heading = document.createElement("h2");
-      heading.textContent = name;
-      section.appendChild(heading);
+  function renderSection(section) {
+    const el = document.createElement("div");
+    el.className = "section";
 
-      const addRow = document.createElement("div");
-      addRow.className = "add-row";
+    const header = document.createElement("div");
+    header.className = "section-header";
+
+    const heading = document.createElement("h2");
+    heading.textContent = section.name;
+    heading.title = "Tap to rename";
+    heading.addEventListener("click", () => startRenameSection(section.id, header));
+    header.appendChild(heading);
+
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "section-remove";
+    removeBtn.textContent = "✕";
+    removeBtn.title = "Delete section";
+    removeBtn.addEventListener("click", () => deleteSection(section.id));
+    header.appendChild(removeBtn);
+
+    el.appendChild(header);
+
+    const addRow = document.createElement("div");
+    addRow.className = "add-row";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "Mailbox #";
+    input.inputMode = "numeric";
+    const addBtn = document.createElement("button");
+    addBtn.textContent = "Add";
+    const doAdd = () => {
+      const value = input.value.trim();
+      if (!value) return;
+      addPackage(section.id, value);
+      input.value = "";
+      input.focus();
+    };
+    addBtn.addEventListener("click", doAdd);
+    input.addEventListener("keydown", e => { if (e.key === "Enter") doAdd(); });
+    addRow.appendChild(input);
+    addRow.appendChild(addBtn);
+    el.appendChild(addRow);
+
+    const entriesEl = document.createElement("div");
+    entriesEl.className = "entries";
+
+    if (section.entries.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = "No packages";
+      entriesEl.appendChild(empty);
+    } else {
+      section.entries.forEach(entry => {
+        entriesEl.appendChild(renderEntry(section.id, entry));
+      });
+    }
+
+    el.appendChild(entriesEl);
+    return el;
+  }
+
+  function renderAddSection() {
+    const el = document.createElement("div");
+    el.className = "add-section";
+
+    const trigger = document.createElement("button");
+    trigger.className = "add-section-trigger";
+    trigger.textContent = "+ Add Section";
+    trigger.addEventListener("click", () => {
+      el.innerHTML = "";
+      const form = document.createElement("div");
+      form.className = "add-section-form";
       const input = document.createElement("input");
       input.type = "text";
-      input.placeholder = "Mailbox #";
-      input.inputMode = "numeric";
+      input.placeholder = "Section name";
       const addBtn = document.createElement("button");
       addBtn.textContent = "Add";
       const doAdd = () => {
         const value = input.value.trim();
         if (!value) return;
-        addPackage(name, value);
-        input.value = "";
-        input.focus();
+        addSection(value);
       };
       addBtn.addEventListener("click", doAdd);
       input.addEventListener("keydown", e => { if (e.key === "Enter") doAdd(); });
-      addRow.appendChild(input);
-      addRow.appendChild(addBtn);
-      section.appendChild(addRow);
+      form.appendChild(input);
+      form.appendChild(addBtn);
+      el.appendChild(form);
+      input.focus();
+    });
 
-      const entriesEl = document.createElement("div");
-      entriesEl.className = "entries";
+    el.appendChild(trigger);
+    return el;
+  }
 
-      const list = state.sections[name];
-      if (list.length === 0) {
-        const empty = document.createElement("div");
-        empty.className = "empty";
-        empty.textContent = "No packages";
-        entriesEl.appendChild(empty);
-      } else {
-        list.forEach(entry => {
-          entriesEl.appendChild(renderEntry(name, entry));
-        });
+  function startRenameSection(sectionId, header) {
+    const section = getSection(sectionId);
+    if (!section) return;
+
+    header.innerHTML = "";
+    const form = document.createElement("div");
+    form.className = "rename-form";
+
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.value = section.name;
+
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "save";
+    saveBtn.textContent = "Save";
+    saveBtn.addEventListener("click", () => commitRenameSection(sectionId, nameInput.value));
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.className = "cancel";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", render);
+
+    nameInput.addEventListener("keydown", e => {
+      if (e.key === "Enter") commitRenameSection(sectionId, nameInput.value);
+      if (e.key === "Escape") render();
+    });
+
+    form.appendChild(nameInput);
+    form.appendChild(saveBtn);
+    form.appendChild(cancelBtn);
+    header.appendChild(form);
+    nameInput.focus();
+    nameInput.select();
+  }
+
+  function commitRenameSection(sectionId, newNameRaw) {
+    const newName = newNameRaw.trim();
+    if (!newName) return;
+    const section = getSection(sectionId);
+    if (!section) return;
+    section.name = newName;
+    save();
+    render();
+  }
+
+  function addSection(name) {
+    state.sections.push({ id: nextSectionId++, name, entries: [] });
+    save();
+    render();
+  }
+
+  let pendingDelete = null;
+  let toastTimer = null;
+
+  function deleteSection(sectionId) {
+    const idx = state.sections.findIndex(s => s.id === sectionId);
+    if (idx === -1) return;
+    const [removed] = state.sections.splice(idx, 1);
+    const removedIndex = idx;
+    save();
+    render();
+    showUndoToast({
+      type: "section",
+      message: `Deleted section "${removed.name}"`,
+      undo: () => {
+        state.sections.splice(removedIndex, 0, removed);
       }
-
-      section.appendChild(entriesEl);
-      container.appendChild(section);
     });
   }
 
-  function renderEntry(sectionName, entry) {
+  function renderEntry(sectionId, entry) {
     const row = document.createElement("div");
     row.className = "entry";
 
@@ -296,31 +570,31 @@
     label.className = "number";
     label.textContent = entry.qty > 1 ? `${entry.number}.${entry.qty}` : entry.number;
     label.title = "Tap to edit";
-    label.addEventListener("click", () => startEdit(sectionName, entry.id, row));
+    label.addEventListener("click", () => startEdit(sectionId, entry.id, row));
     row.appendChild(label);
 
     const minusBtn = document.createElement("button");
     minusBtn.textContent = "−";
-    minusBtn.addEventListener("click", () => changeQty(sectionName, entry.id, -1));
+    minusBtn.addEventListener("click", () => changeQty(sectionId, entry.id, -1));
     row.appendChild(minusBtn);
 
     const plusBtn = document.createElement("button");
     plusBtn.textContent = "+";
-    plusBtn.addEventListener("click", () => changeQty(sectionName, entry.id, 1));
+    plusBtn.addEventListener("click", () => changeQty(sectionId, entry.id, 1));
     row.appendChild(plusBtn);
 
     const delBtn = document.createElement("button");
     delBtn.className = "delete";
     delBtn.textContent = "✕";
     delBtn.title = "Delete";
-    delBtn.addEventListener("click", () => deleteEntry(sectionName, entry.id));
+    delBtn.addEventListener("click", () => deleteEntry(sectionId, entry.id));
     row.appendChild(delBtn);
 
     return row;
   }
 
-  function startEdit(sectionName, id, row) {
-    const entry = state.sections[sectionName].find(e => e.id === id);
+  function startEdit(sectionId, id, row) {
+    const entry = getSection(sectionId).entries.find(e => e.id === id);
     if (!entry) return;
 
     row.innerHTML = "";
@@ -341,7 +615,7 @@
     const saveBtn = document.createElement("button");
     saveBtn.className = "save";
     saveBtn.textContent = "Save";
-    saveBtn.addEventListener("click", () => commitEdit(sectionName, id, numberInput.value, qtyInput.value));
+    saveBtn.addEventListener("click", () => commitEdit(sectionId, id, numberInput.value, qtyInput.value));
 
     const cancelBtn = document.createElement("button");
     cancelBtn.className = "cancel";
@@ -356,13 +630,13 @@
     numberInput.focus();
   }
 
-  function commitEdit(sectionName, id, newNumberRaw, newQtyRaw) {
+  function commitEdit(sectionId, id, newNumberRaw, newQtyRaw) {
     const newNumber = newNumberRaw.trim();
     if (!newNumber) return;
     let newQty = parseInt(newQtyRaw, 10);
     if (isNaN(newQty) || newQty < 1) newQty = 1;
 
-    const list = state.sections[sectionName];
+    const list = getSection(sectionId).entries;
     const entry = list.find(e => e.id === id);
     if (!entry) return;
 
@@ -376,50 +650,54 @@
       entry.qty = newQty;
     }
 
-    sortSection(sectionName);
+    sortSection(sectionId);
     save();
     render();
   }
 
-  function addPackage(sectionName, number) {
-    const list = state.sections[sectionName];
+  function addPackage(sectionId, number) {
+    const list = getSection(sectionId).entries;
     const existing = list.find(e => e.number === number);
     if (existing) {
       existing.qty += 1;
     } else {
-      list.push({ id: nextId++, number, qty: 1 });
+      list.push({ id: nextEntryId++, number, qty: 1 });
     }
-    sortSection(sectionName);
+    sortSection(sectionId);
     save();
     render();
   }
 
-  function changeQty(sectionName, id, delta) {
-    const entry = state.sections[sectionName].find(e => e.id === id);
+  function changeQty(sectionId, id, delta) {
+    const entry = getSection(sectionId).entries.find(e => e.id === id);
     if (!entry) return;
     entry.qty = Math.max(1, entry.qty + delta);
     save();
     render();
   }
 
-  let pendingDelete = null;
-  let toastTimer = null;
-
-  function deleteEntry(sectionName, id) {
-    const list = state.sections[sectionName];
+  function deleteEntry(sectionId, id) {
+    const list = getSection(sectionId).entries;
     const idx = list.findIndex(e => e.id === id);
     if (idx === -1) return;
     const [removed] = list.splice(idx, 1);
     save();
     render();
-    showUndoToast(sectionName, removed);
+    showUndoToast({
+      type: "entry",
+      message: `Deleted mailbox ${removed.number} from ${getSection(sectionId).name}`,
+      undo: () => {
+        list.push(removed);
+        sortSection(sectionId);
+      }
+    });
   }
 
-  function showUndoToast(sectionName, entry) {
-    pendingDelete = { sectionName, entry };
+  function showUndoToast(action) {
+    pendingDelete = action;
     const toast = document.getElementById("toast");
     const msg = document.getElementById("toast-msg");
-    msg.textContent = `Deleted mailbox ${entry.number} from ${sectionName}`;
+    msg.textContent = action.message;
     toast.classList.add("show");
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => {
@@ -430,9 +708,7 @@
 
   document.getElementById("toast-undo").addEventListener("click", () => {
     if (!pendingDelete) return;
-    const { sectionName, entry } = pendingDelete;
-    state.sections[sectionName].push(entry);
-    sortSection(sectionName);
+    pendingDelete.undo();
     save();
     render();
     document.getElementById("toast").classList.remove("show");
@@ -440,7 +716,7 @@
     pendingDelete = null;
   });
 
-  Object.keys(state.sections).forEach(sortSection);
+  state.sections.forEach(s => sortSection(s.id));
   render();
 })();
 </script>
