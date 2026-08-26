@@ -65,7 +65,8 @@
     min-width: 0;
   }
   .section h2:hover { background: #eef1f5; }
-  .section-remove {
+  .section-remove,
+  .section-move {
     flex-shrink: 0;
     width: 22px;
     height: 22px;
@@ -81,6 +82,45 @@
     color: var(--danger);
   }
   .section-remove:hover { background: #fdecec; }
+  .section-move {
+    color: var(--accent);
+    font-size: 14px;
+  }
+  .section-move:hover { background: #eaf1fe; }
+  .move-form {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .move-form select {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 7px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    font-size: 13px;
+  }
+  .move-form .save,
+  .move-form .cancel {
+    flex-shrink: 0;
+    border-radius: 5px;
+    padding: 5px 10px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .move-form .save {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+  }
+  .move-form .save:hover { background: var(--accent-dark); }
+  .move-form .cancel {
+    background: none;
+    border: 1px solid var(--border);
+  }
+  .move-form .cancel:hover { background: #eef1f5; }
   .rename-form {
     display: flex;
     align-items: center;
@@ -323,6 +363,9 @@
     }
     .edit-form input.number-field { width: 50px; }
     .edit-form input.qty-field { width: 40px; }
+    .move-form { margin-bottom: 6px; gap: 4px; }
+    .move-form select { font-size: 12px; padding: 6px 4px; }
+    .move-form .save, .move-form .cancel { padding: 5px 8px; font-size: 12px; }
   }
 </style>
 </head>
@@ -341,6 +384,7 @@
 
   let nextSectionId = 1;
   let nextEntryId = 1;
+  let moveSectionId = null;
 
   function loadState() {
     try {
@@ -411,6 +455,18 @@
     heading.addEventListener("click", () => startRenameSection(section.id, header));
     header.appendChild(heading);
 
+    if (section.entries.length > 0 && state.sections.length > 1) {
+      const moveBtn = document.createElement("button");
+      moveBtn.className = "section-move";
+      moveBtn.textContent = "⇥";
+      moveBtn.title = "Move all packages to another section";
+      moveBtn.addEventListener("click", () => {
+        moveSectionId = moveSectionId === section.id ? null : section.id;
+        render();
+      });
+      header.appendChild(moveBtn);
+    }
+
     const removeBtn = document.createElement("button");
     removeBtn.className = "section-remove";
     removeBtn.textContent = "✕";
@@ -419,6 +475,10 @@
     header.appendChild(removeBtn);
 
     el.appendChild(header);
+
+    if (moveSectionId === section.id) {
+      el.appendChild(renderMoveForm(section));
+    }
 
     const addRow = document.createElement("div");
     addRow.className = "add-row";
@@ -490,6 +550,72 @@
 
     el.appendChild(trigger);
     return el;
+  }
+
+  function renderMoveForm(section) {
+    const form = document.createElement("div");
+    form.className = "move-form";
+
+    const select = document.createElement("select");
+    state.sections
+      .filter(s => s.id !== section.id)
+      .forEach(s => {
+        const opt = document.createElement("option");
+        opt.value = s.id;
+        opt.textContent = s.name;
+        select.appendChild(opt);
+      });
+
+    const moveBtn = document.createElement("button");
+    moveBtn.className = "save";
+    moveBtn.textContent = "Move";
+    moveBtn.addEventListener("click", () => {
+      moveSectionId = null;
+      moveAllToSection(section.id, parseInt(select.value, 10));
+    });
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.className = "cancel";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", () => {
+      moveSectionId = null;
+      render();
+    });
+
+    form.appendChild(select);
+    form.appendChild(moveBtn);
+    form.appendChild(cancelBtn);
+    return form;
+  }
+
+  function moveAllToSection(sourceId, destId) {
+    const source = getSection(sourceId);
+    const dest = getSection(destId);
+    if (!source || !dest || source.entries.length === 0) return;
+
+    const sourceBefore = source.entries.map(e => ({ ...e }));
+    const destBefore = dest.entries.map(e => ({ ...e }));
+
+    source.entries.forEach(entry => {
+      const existing = dest.entries.find(e => e.number === entry.number);
+      if (existing) {
+        existing.qty += entry.qty;
+      } else {
+        dest.entries.push({ id: nextEntryId++, number: entry.number, qty: entry.qty });
+      }
+    });
+    source.entries = [];
+    sortSection(destId);
+
+    save();
+    render();
+    showUndoToast({
+      message: `Moved ${sourceBefore.length} ${sourceBefore.length === 1 ? "number" : "numbers"} from "${source.name}" to "${dest.name}"`,
+      undo: () => {
+        source.entries = sourceBefore;
+        dest.entries = destBefore;
+      }
+    });
   }
 
   function startRenameSection(sectionId, header) {
