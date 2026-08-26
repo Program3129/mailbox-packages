@@ -46,12 +46,14 @@
   .section-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 6px;
     margin-bottom: 10px;
+    padding-right: 4px;
   }
   .section h2 {
-    font-size: 15px;
+    flex: 1;
+    font-size: 17px;
+    font-weight: 600;
     margin: 0;
     color: var(--muted);
     text-transform: uppercase;
@@ -65,14 +67,28 @@
     min-width: 0;
   }
   .section h2:hover { background: #eef1f5; }
+  .section-count {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--muted);
+    background: var(--entry-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
   .section-remove,
   .section-move {
     flex-shrink: 0;
-    width: 22px;
-    height: 22px;
+    width: 28px;
+    height: 28px;
     border: 1px solid var(--border);
     background: #fff;
-    border-radius: 5px;
+    border-radius: 6px;
     font-size: 12px;
     line-height: 1;
     cursor: pointer;
@@ -87,6 +103,12 @@
     font-size: 14px;
   }
   .section-move:hover { background: #eaf1fe; }
+  .section-move:disabled {
+    color: var(--muted);
+    cursor: default;
+    opacity: 0.5;
+  }
+  .section-move:disabled:hover { background: #fff; }
   .move-form {
     display: flex;
     align-items: center;
@@ -140,6 +162,7 @@
     display: flex;
     gap: 8px;
     margin-bottom: 10px;
+    padding-right: 4px;
   }
   .add-row input {
     flex: 1;
@@ -150,14 +173,19 @@
     font-size: 14px;
   }
   .add-row button {
-    padding: 8px 14px;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
     border: none;
     border-radius: 6px;
     background: var(--accent);
     color: #fff;
-    font-size: 14px;
+    font-size: 18px;
+    line-height: 1;
     cursor: pointer;
-    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .add-row button:hover { background: var(--accent-dark); }
   .entries {
@@ -172,11 +200,12 @@
     background: var(--entry-bg);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 6px 8px;
+    padding: 6px 4px 6px 8px;
   }
   .entry .number {
     flex: 1;
     font-size: 15px;
+    font-weight: 700;
     font-variant-numeric: tabular-nums;
     cursor: pointer;
     padding: 4px 6px;
@@ -184,11 +213,11 @@
   }
   .entry .number:hover { background: #eef1f5; }
   .entry button {
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
     border: 1px solid var(--border);
     background: #fff;
-    border-radius: 5px;
+    border-radius: 6px;
     font-size: 14px;
     line-height: 1;
     cursor: pointer;
@@ -328,44 +357,28 @@
     flex-shrink: 0;
   }
 
-  /* mobile: optimized for ~4 sections in a 2x2 grid */
+  /* mobile: one section per row, full-width, easier to read/tap */
   @media (max-width: 640px) {
     body { padding: 12px; }
     h1 { font-size: 18px; margin-bottom: 12px; }
     .sections {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
+      grid-template-columns: 1fr;
+      gap: 10px;
     }
     .section, .add-section {
-      padding: 8px;
       min-height: 0;
       min-width: 0;
     }
-    .section h2 { font-size: 12px; }
-    .section-header { margin-bottom: 6px; }
-    .add-row { margin-bottom: 6px; gap: 4px; }
-    .add-row input {
-      padding: 8px 6px;
-      font-size: 13px;
-      min-width: 0;
-    }
+    .entry button,
+    .section-remove,
+    .section-move,
+    .section-count,
     .add-row button {
-      padding: 8px 10px;
-      font-size: 13px;
+      width: 32px;
+      height: 32px;
+      font-size: 16px;
     }
-    .entries { gap: 4px; }
-    .entry { padding: 5px 4px; gap: 4px; }
-    .entry .number { font-size: 13px; padding: 6px 4px; }
-    .entry button {
-      width: 30px;
-      height: 30px;
-      font-size: 14px;
-    }
-    .edit-form input.number-field { width: 50px; }
-    .edit-form input.qty-field { width: 40px; }
-    .move-form { margin-bottom: 6px; gap: 4px; }
-    .move-form select { font-size: 12px; padding: 6px 4px; }
-    .move-form .save, .move-form .cancel { padding: 5px 8px; font-size: 12px; }
+    .add-row button { font-size: 20px; }
   }
 </style>
 </head>
@@ -427,6 +440,24 @@
     return state.sections.find(s => s.id === sectionId);
   }
 
+  // Splits input like "698.3" into { number: "698", qty: 3 } so typing the
+  // same dotted notation the app displays (e.g. after a 698.3 entry) is
+  // read as "box 698, quantity 3" instead of becoming a literal "698.3"
+  // mailbox number that then displays as "698.3.4" once incremented.
+  function parseNumberInput(raw) {
+    const trimmed = raw.trim();
+    const lastDot = trimmed.lastIndexOf(".");
+    if (lastDot > 0 && lastDot < trimmed.length - 1) {
+      const base = trimmed.slice(0, lastDot);
+      const suffix = trimmed.slice(lastDot + 1);
+      if (/^\d+$/.test(suffix)) {
+        const qty = parseInt(suffix, 10);
+        if (qty >= 1) return { number: base, qty };
+      }
+    }
+    return { number: trimmed, qty: null };
+  }
+
   function sortSection(sectionId) {
     getSection(sectionId).entries.sort((a, b) =>
       a.number.localeCompare(b.number, undefined, { numeric: true, sensitivity: "base" })
@@ -455,15 +486,25 @@
     heading.addEventListener("click", () => startRenameSection(section.id, header));
     header.appendChild(heading);
 
-    if (section.entries.length > 0 && state.sections.length > 1) {
+    const count = document.createElement("span");
+    count.className = "section-count";
+    count.textContent = section.entries.length;
+    header.appendChild(count);
+
+    if (state.sections.length > 1) {
       const moveBtn = document.createElement("button");
       moveBtn.className = "section-move";
-      moveBtn.textContent = "⇥";
-      moveBtn.title = "Move all packages to another section";
-      moveBtn.addEventListener("click", () => {
-        moveSectionId = moveSectionId === section.id ? null : section.id;
-        render();
-      });
+      moveBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="18" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+      if (section.entries.length === 0) {
+        moveBtn.disabled = true;
+        moveBtn.title = "No packages to move";
+      } else {
+        moveBtn.title = "Move all packages to another section";
+        moveBtn.addEventListener("click", () => {
+          moveSectionId = moveSectionId === section.id ? null : section.id;
+          render();
+        });
+      }
       header.appendChild(moveBtn);
     }
 
@@ -487,7 +528,8 @@
     input.placeholder = "Mailbox #";
     input.inputMode = "numeric";
     const addBtn = document.createElement("button");
-    addBtn.textContent = "Add";
+    addBtn.textContent = "+";
+    addBtn.title = "Add";
     const doAdd = () => {
       const value = input.value.trim();
       if (!value) return;
@@ -757,10 +799,14 @@
   }
 
   function commitEdit(sectionId, id, newNumberRaw, newQtyRaw) {
-    const newNumber = newNumberRaw.trim();
+    const parsed = parseNumberInput(newNumberRaw);
+    const newNumber = parsed.number;
     if (!newNumber) return;
-    let newQty = parseInt(newQtyRaw, 10);
-    if (isNaN(newQty) || newQty < 1) newQty = 1;
+    let newQty = parsed.qty;
+    if (newQty === null) {
+      newQty = parseInt(newQtyRaw, 10);
+      if (isNaN(newQty) || newQty < 1) newQty = 1;
+    }
 
     const list = getSection(sectionId).entries;
     const entry = list.find(e => e.id === id);
@@ -781,13 +827,14 @@
     render();
   }
 
-  function addPackage(sectionId, number) {
+  function addPackage(sectionId, rawNumber) {
+    const parsed = parseNumberInput(rawNumber);
     const list = getSection(sectionId).entries;
-    const existing = list.find(e => e.number === number);
+    const existing = list.find(e => e.number === parsed.number);
     if (existing) {
       existing.qty += 1;
     } else {
-      list.push({ id: nextEntryId++, number, qty: 1 });
+      list.push({ id: nextEntryId++, number: parsed.number, qty: parsed.qty || 1 });
     }
     sortSection(sectionId);
     save();
