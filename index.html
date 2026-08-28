@@ -464,6 +464,8 @@
     );
   }
 
+  let focusInputSectionId = null;
+
   function render() {
     const container = document.getElementById("sections");
     container.innerHTML = "";
@@ -471,11 +473,20 @@
       container.appendChild(renderSection(section));
     });
     container.appendChild(renderAddSection());
+
+    if (focusInputSectionId !== null) {
+      const input = container.querySelector(
+        `.section[data-section-id="${focusInputSectionId}"] .add-row input`
+      );
+      if (input) input.focus();
+      focusInputSectionId = null;
+    }
   }
 
   function renderSection(section) {
     const el = document.createElement("div");
     el.className = "section";
+    el.dataset.sectionId = section.id;
 
     const header = document.createElement("div");
     header.className = "section-header";
@@ -533,9 +544,8 @@
     const doAdd = () => {
       const value = input.value.trim();
       if (!value) return;
+      focusInputSectionId = section.id;
       addPackage(section.id, value);
-      input.value = "";
-      input.focus();
     };
     addBtn.addEventListener("click", doAdd);
     input.addEventListener("keydown", e => { if (e.key === "Enter") doAdd(); });
