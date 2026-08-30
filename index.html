@@ -25,9 +25,20 @@
     color: var(--text);
     padding: 24px;
   }
+  .app-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
   h1 {
     font-size: 22px;
-    margin: 0 0 20px;
+    margin: 0;
+  }
+  .total-count {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
   }
   .sections {
     display: grid;
@@ -360,7 +371,9 @@
   /* mobile: one section per row, full-width, easier to read/tap */
   @media (max-width: 640px) {
     body { padding: 12px; }
-    h1 { font-size: 18px; margin-bottom: 12px; }
+    .app-header { margin-bottom: 12px; }
+    h1 { font-size: 18px; }
+    .total-count { font-size: 18px; }
     .sections {
       grid-template-columns: 1fr;
       gap: 10px;
@@ -383,7 +396,10 @@
 </style>
 </head>
 <body>
-  <h1>Mailbox Packages</h1>
+  <div class="app-header">
+    <h1>Mailbox Packages</h1>
+    <span id="total-count" class="total-count"></span>
+  </div>
   <div class="sections" id="sections"></div>
   <div id="toast">
     <span id="toast-msg"></span>
@@ -473,6 +489,9 @@
       container.appendChild(renderSection(section));
     });
     container.appendChild(renderAddSection());
+
+    const total = state.sections.reduce((sum, s) => sum + s.entries.length, 0);
+    document.getElementById("total-count").textContent = total;
 
     if (focusInputSectionId !== null) {
       const input = container.querySelector(
