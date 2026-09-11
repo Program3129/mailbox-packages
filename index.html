@@ -223,6 +223,11 @@
     border-radius: 4px;
   }
   .entry .number:hover { background: #eef1f5; }
+  .entry .number .number-high { color: var(--danger); }
+  .entry .number .entry-label {
+    color: var(--accent);
+    font-weight: 600;
+  }
   .entry button {
     width: 28px;
     height: 28px;
@@ -459,19 +464,30 @@
   // Splits input like "698.3" into { number: "698", qty: 3 } so typing the
   // same dotted notation the app displays (e.g. after a 698.3 entry) is
   // read as "box 698, quantity 3" instead of becoming a literal "698.3"
-  // mailbox number that then displays as "698.3.4" once incremented.
+  // mailbox number that then displays as "698.3.4" once incremented. Also
+  // splits off any trailing free-text note (e.g. "113 usps dhl" -> number
+  // "113", label "usps dhl") so it can be shown highlighted separately.
   function parseNumberInput(raw) {
     const trimmed = raw.trim();
-    const lastDot = trimmed.lastIndexOf(".");
-    if (lastDot > 0 && lastDot < trimmed.length - 1) {
-      const base = trimmed.slice(0, lastDot);
-      const suffix = trimmed.slice(lastDot + 1);
+    const spaceIdx = trimmed.search(/\s/);
+    let numberPart = trimmed;
+    let label = null;
+    if (spaceIdx !== -1) {
+      numberPart = trimmed.slice(0, spaceIdx);
+      const rest = trimmed.slice(spaceIdx + 1).trim();
+      label = rest || null;
+    }
+
+    const lastDot = numberPart.lastIndexOf(".");
+    if (lastDot > 0 && lastDot < numberPart.length - 1) {
+      const base = numberPart.slice(0, lastDot);
+      const suffix = numberPart.slice(lastDot + 1);
       if (/^\d+$/.test(suffix)) {
         const qty = parseInt(suffix, 10);
-        if (qty >= 1) return { number: base, qty };
+        if (qty >= 1) return { number: base, qty, label };
       }
     }
-    return { number: trimmed, qty: null };
+    return { number: numberPart, qty: null, label };
   }
 
   function sortSection(sectionId) {
@@ -671,8 +687,9 @@
       const existing = dest.entries.find(e => e.number === entry.number);
       if (existing) {
         existing.qty += entry.qty;
+        if (entry.label) existing.label = entry.label;
       } else {
-        dest.entries.push({ id: nextEntryId++, number: entry.number, qty: entry.qty });
+        dest.entries.push({ id: nextEntryId++, number: entry.number, qty: entry.qty, label: entry.label });
       }
     });
     source.entries = [];
@@ -765,9 +782,21 @@
 
     const label = document.createElement("div");
     label.className = "number";
-    label.textContent = entry.qty > 1 ? `${entry.number}.${entry.qty}` : entry.number;
     label.title = "Tap to edit";
     label.addEventListener("click", () => startEdit(sectionId, entry.id, row));
+
+    const numberSpan = document.createElement("span");
+    if (parseInt(entry.number, 10) >= 2000) numberSpan.classList.add("number-high");
+    numberSpan.textContent = entry.qty > 1 ? `${entry.number}.${entry.qty}` : entry.number;
+    label.appendChild(numberSpan);
+
+    if (entry.label) {
+      const labelSpan = document.createElement("span");
+      labelSpan.className = "entry-label";
+      labelSpan.textContent = " " + entry.label;
+      label.appendChild(labelSpan);
+    }
+
     row.appendChild(label);
 
     const minusBtn = document.createElement("button");
@@ -801,7 +830,7 @@
     const numberInput = document.createElement("input");
     numberInput.className = "number-field";
     numberInput.type = "text";
-    numberInput.value = entry.number;
+    numberInput.value = entry.label ? `${entry.number} ${entry.label}` : entry.number;
 
     const qtyInput = document.createElement("input");
     qtyInput.className = "qty-field";
@@ -844,11 +873,13 @@
     const duplicate = list.find(e => e.id !== id && e.number === newNumber);
     if (duplicate) {
       duplicate.qty += newQty;
+      if (parsed.label) duplicate.label = parsed.label;
       const idx = list.indexOf(entry);
       list.splice(idx, 1);
     } else {
       entry.number = newNumber;
       entry.qty = newQty;
+      entry.label = parsed.label;
     }
 
     sortSection(sectionId);
@@ -862,8 +893,9 @@
     const existing = list.find(e => e.number === parsed.number);
     if (existing) {
       existing.qty += 1;
+      if (parsed.label) existing.label = parsed.label;
     } else {
-      list.push({ id: nextEntryId++, number: parsed.number, qty: parsed.qty || 1 });
+      list.push({ id: nextEntryId++, number: parsed.number, qty: parsed.qty || 1, label: parsed.label });
     }
     sortSection(sectionId);
     save();
