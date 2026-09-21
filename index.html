@@ -227,6 +227,7 @@
   .entry .number .entry-label {
     color: var(--accent);
     font-weight: 600;
+    text-transform: uppercase;
   }
   .entry button {
     width: 28px;
@@ -475,7 +476,7 @@
     if (spaceIdx !== -1) {
       numberPart = trimmed.slice(0, spaceIdx);
       const rest = trimmed.slice(spaceIdx + 1).trim();
-      label = rest || null;
+      label = rest ? rest.toUpperCase() : null;
     }
 
     const lastDot = numberPart.lastIndexOf(".");
