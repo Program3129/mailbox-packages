@@ -25,11 +25,67 @@
     color: var(--text);
     padding: 24px;
   }
+  .search-box { margin-bottom: 16px; }
+  .search-box input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 16px;
+    background: #fff;
+  }
+  .search-box input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .search-results {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .search-result {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 15px;
+  }
+  .search-result:hover { background: #eef1f5; }
+  .search-result .sr-number { font-weight: 700; }
+  .search-result .sr-number.number-high { color: var(--danger); }
+  .search-result .sr-label {
+    color: var(--accent);
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .search-result .sr-section {
+    margin-left: auto;
+    color: var(--muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+  }
+  .search-empty {
+    color: var(--muted);
+    font-size: 14px;
+    padding: 4px 2px;
+  }
+  .entry.flash { animation: flash 1.6s ease-out; }
+  @keyframes flash {
+    0%, 40% { background: #fff3b0; box-shadow: 0 0 0 2px #f5c518; }
+    100% { background: var(--entry-bg); box-shadow: 0 0 0 0 transparent; }
+  }
   .app-header {
     display: flex;
     align-items: baseline;
     gap: 10px;
-    margin-bottom: 20px;
+    margin-bottom: 12px;
   }
   h1 {
     font-size: 22px;
@@ -406,6 +462,10 @@
     <h1>Mailbox Packages</h1>
     <span id="total-count" class="total-count"></span>
   </div>
+  <div class="search-box">
+    <input id="master-search" type="search" placeholder="Search mailbox # in all sections" inputmode="numeric" autocomplete="off">
+    <div id="search-results" class="search-results" hidden></div>
+  </div>
   <div class="sections" id="sections"></div>
   <div id="toast">
     <span id="toast-msg"></span>
@@ -499,6 +559,69 @@
 
   let focusInputSectionId = null;
 
+  const searchInput = document.getElementById("master-search");
+  const searchResults = document.getElementById("search-results");
+  searchInput.addEventListener("input", renderSearchResults);
+
+  function renderSearchResults() {
+    const query = parseNumberInput(searchInput.value).number;
+    searchResults.innerHTML = "";
+    if (!query) {
+      searchResults.hidden = true;
+      return;
+    }
+    searchResults.hidden = false;
+
+    const matches = [];
+    state.sections.forEach(section => {
+      section.entries.forEach(entry => {
+        if (entry.number.startsWith(query)) matches.push({ section, entry });
+      });
+    });
+
+    if (matches.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "search-empty";
+      empty.textContent = `No mailbox starting with "${query}"`;
+      searchResults.appendChild(empty);
+      return;
+    }
+
+    matches.forEach(({ section, entry }) => {
+      const row = document.createElement("div");
+      row.className = "search-result";
+
+      const num = document.createElement("span");
+      num.className = "sr-number";
+      if (parseInt(entry.number, 10) >= 2000) num.classList.add("number-high");
+      num.textContent = entry.qty > 1 ? `${entry.number}.${entry.qty}` : entry.number;
+      row.appendChild(num);
+
+      if (entry.label) {
+        const lbl = document.createElement("span");
+        lbl.className = "sr-label";
+        lbl.textContent = entry.label;
+        row.appendChild(lbl);
+      }
+
+      const sec = document.createElement("span");
+      sec.className = "sr-section";
+      sec.textContent = section.name;
+      row.appendChild(sec);
+
+      row.addEventListener("click", () => {
+        const target = document.querySelector(`.entry[data-entry-id="${entry.id}"]`);
+        if (!target) return;
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        target.classList.remove("flash");
+        void target.offsetWidth;
+        target.classList.add("flash");
+      });
+
+      searchResults.appendChild(row);
+    });
+  }
+
   function render() {
     const container = document.getElementById("sections");
     container.innerHTML = "";
@@ -509,6 +632,7 @@
 
     const total = state.sections.reduce((sum, s) => sum + s.entries.length, 0);
     document.getElementById("total-count").textContent = total;
+    renderSearchResults();
 
     if (focusInputSectionId !== null) {
       const input = container.querySelector(
@@ -780,6 +904,7 @@
   function renderEntry(sectionId, entry) {
     const row = document.createElement("div");
     row.className = "entry";
+    row.dataset.entryId = entry.id;
 
     const label = document.createElement("div");
     label.className = "number";
