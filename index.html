@@ -279,6 +279,18 @@
     border-radius: 4px;
   }
   .entry .number:hover { background: #eef1f5; }
+  .entry .entry-check {
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    flex-shrink: 0;
+    cursor: pointer;
+    accent-color: var(--accent);
+  }
+  .entry.checked .number {
+    opacity: 0.45;
+    text-decoration: line-through;
+  }
   .entry .number .number-high { color: var(--danger); }
   .entry .number .entry-label {
     color: var(--accent);
@@ -434,6 +446,7 @@
   @media (max-width: 640px) {
     body { padding: 12px; }
     .app-header { margin-bottom: 12px; }
+    .entry .entry-check { width: 24px; height: 24px; }
     h1 { font-size: 18px; }
     .total-count { font-size: 18px; }
     .sections {
@@ -814,7 +827,7 @@
         existing.qty += entry.qty;
         if (entry.label) existing.label = entry.label;
       } else {
-        dest.entries.push({ id: nextEntryId++, number: entry.number, qty: entry.qty, label: entry.label });
+        dest.entries.push({ id: nextEntryId++, number: entry.number, qty: entry.qty, label: entry.label, checked: entry.checked });
       }
     });
     source.entries = [];
@@ -905,6 +918,19 @@
     const row = document.createElement("div");
     row.className = "entry";
     row.dataset.entryId = entry.id;
+    if (entry.checked) row.classList.add("checked");
+
+    const check = document.createElement("input");
+    check.type = "checkbox";
+    check.className = "entry-check";
+    check.checked = !!entry.checked;
+    check.title = "Check off";
+    check.addEventListener("change", () => {
+      entry.checked = check.checked;
+      save();
+      render();
+    });
+    row.appendChild(check);
 
     const label = document.createElement("div");
     label.className = "number";
