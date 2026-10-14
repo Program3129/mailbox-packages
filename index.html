@@ -25,6 +25,21 @@
     color: var(--text);
     padding: 24px;
   }
+  .delete-checked {
+    margin-left: auto;
+    align-self: center;
+    padding: 6px 12px;
+    border: 1px solid #f3c7c7;
+    background: #fff;
+    color: var(--danger);
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .delete-checked:hover { background: #fdecec; }
+  .delete-checked[hidden] { display: none; }
   .search-box { margin-bottom: 16px; }
   .search-box input {
     width: 100%;
@@ -474,6 +489,7 @@
   <div class="app-header">
     <h1>Mailbox Packages</h1>
     <span id="total-count" class="total-count"></span>
+    <button id="delete-checked" class="delete-checked" hidden></button>
   </div>
   <div class="search-box">
     <input id="master-search" type="search" placeholder="Search mailbox # in all sections" inputmode="numeric" autocomplete="off">
@@ -645,6 +661,14 @@
 
     const total = state.sections.reduce((sum, s) => sum + s.entries.length, 0);
     document.getElementById("total-count").textContent = total;
+
+    const checkedCount = state.sections.reduce(
+      (sum, s) => sum + s.entries.filter(e => e.checked).length, 0
+    );
+    const delChecked = document.getElementById("delete-checked");
+    delChecked.hidden = checkedCount === 0;
+    delChecked.textContent = `Delete checked (${checkedCount})`;
+
     renderSearchResults();
 
     if (focusInputSectionId !== null) {
@@ -1078,6 +1102,33 @@
       }
     });
   }
+
+  function deleteCheckedEntries() {
+    const removedBySection = [];
+    state.sections.forEach(section => {
+      const removed = section.entries.filter(e => e.checked);
+      if (removed.length === 0) return;
+      section.entries = section.entries.filter(e => !e.checked);
+      removedBySection.push({ section, removed });
+    });
+    if (removedBySection.length === 0) return;
+
+    const count = removedBySection.reduce((sum, r) => sum + r.removed.length, 0);
+    save();
+    render();
+    showUndoToast({
+      type: "checked",
+      message: `Deleted ${count} checked ${count === 1 ? "entry" : "entries"}`,
+      undo: () => {
+        removedBySection.forEach(({ section, removed }) => {
+          section.entries.push(...removed);
+          sortSection(section.id);
+        });
+      }
+    });
+  }
+
+  document.getElementById("delete-checked").addEventListener("click", deleteCheckedEntries);
 
   function showUndoToast(action) {
     pendingDelete = action;
