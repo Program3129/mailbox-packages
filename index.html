@@ -457,6 +457,73 @@
     flex-shrink: 0;
   }
 
+  [hidden] { display: none !important; }
+
+  /* saved dates */
+  .history-bar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .save-day {
+    padding: 8px 14px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .save-day:hover { background: var(--accent-dark); }
+  .save-day:disabled { opacity: 0.45; cursor: default; }
+  .save-day:disabled:hover { background: var(--accent); }
+  .history-select {
+    flex: 1;
+    min-width: 160px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    background: #fff;
+    color: var(--text);
+  }
+  .history-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    background: #fff8e1;
+    border: 1px solid #f5c518;
+    border-radius: 8px;
+    font-size: 14px;
+  }
+  .history-banner span { flex: 1; }
+  .history-back {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    background: #fff;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .history-back:hover { background: #eef1f5; }
+  .viewing-history #sections,
+  .viewing-history .search-box,
+  .viewing-history .delete-checked,
+  .viewing-history .total-count,
+  .viewing-history .save-day { display: none !important; }
+  .history-view .section h2 { cursor: default; }
+  .history-view .section h2:hover { background: none; }
+  .history-view .entry .number { cursor: default; }
+  .history-view .entry .number:hover { background: none; }
+  .history-view .entry-check { cursor: default; }
+
   /* mobile: one section per row, full-width, easier to read/tap */
   @media (max-width: 640px) {
     body { padding: 12px; }
@@ -491,11 +558,20 @@
     <span id="total-count" class="total-count"></span>
     <button id="delete-checked" class="delete-checked" hidden></button>
   </div>
+  <div class="history-bar">
+    <button id="save-day" class="save-day" title="Save a snapshot of every section under today's date">Save today</button>
+    <select id="history-select" class="history-select" aria-label="View a saved date"></select>
+  </div>
+  <div id="history-banner" class="history-banner" hidden>
+    <span id="history-banner-text"></span>
+    <button id="history-back" class="history-back">Back to today</button>
+  </div>
   <div class="search-box">
     <input id="master-search" type="search" placeholder="Search mailbox # in all sections" inputmode="numeric" autocomplete="off">
     <div id="search-results" class="search-results" hidden></div>
   </div>
   <div class="sections" id="sections"></div>
+  <div class="sections history-view" id="history-sections" hidden></div>
   <div id="toast">
     <span id="toast-msg"></span>
     <button id="toast-undo">Undo</button>
@@ -668,6 +744,11 @@
     const delChecked = document.getElementById("delete-checked");
     delChecked.hidden = checkedCount === 0;
     delChecked.textContent = `Delete checked (${checkedCount})`;
+
+    saveDayBtn.disabled = total === 0;
+    saveDayBtn.title = total === 0
+      ? "Nothing to save yet"
+      : "Save a snapshot of every section under today's date";
 
     renderSearchResults();
 
@@ -956,23 +1037,9 @@
     });
     row.appendChild(check);
 
-    const label = document.createElement("div");
-    label.className = "number";
+    const label = buildEntryLabel(entry);
     label.title = "Tap to edit";
     label.addEventListener("click", () => startEdit(sectionId, entry.id, row));
-
-    const numberSpan = document.createElement("span");
-    if (parseInt(entry.number, 10) >= 2000) numberSpan.classList.add("number-high");
-    numberSpan.textContent = entry.qty > 1 ? `${entry.number}.${entry.qty}` : entry.number;
-    label.appendChild(numberSpan);
-
-    if (entry.label) {
-      const labelSpan = document.createElement("span");
-      labelSpan.className = "entry-label";
-      labelSpan.textContent = " " + entry.label;
-      label.appendChild(labelSpan);
-    }
-
     row.appendChild(label);
 
     const minusBtn = document.createElement("button");
@@ -1153,7 +1220,185 @@
     pendingDelete = null;
   });
 
+  function buildEntryLabel(entry) {
+    const label = document.createElement("div");
+    label.className = "number";
+
+    const numberSpan = document.createElement("span");
+    if (parseInt(entry.number, 10) >= 2000) numberSpan.classList.add("number-high");
+    numberSpan.textContent = entry.qty > 1 ? `${entry.number}.${entry.qty}` : entry.number;
+    label.appendChild(numberSpan);
+
+    if (entry.label) {
+      const labelSpan = document.createElement("span");
+      labelSpan.className = "entry-label";
+      labelSpan.textContent = " " + entry.label;
+      label.appendChild(labelSpan);
+    }
+    return label;
+  }
+
+  // ---- saved dates (snapshots of every section, one per calendar day) ----
+  const HISTORY_KEY = "mailboxPackages_history_v1";
+  const saveDayBtn = document.getElementById("save-day");
+  const historySelect = document.getElementById("history-select");
+  const historyBanner = document.getElementById("history-banner");
+  const historyBannerText = document.getElementById("history-banner-text");
+  const historySections = document.getElementById("history-sections");
+  let viewingDayKey = null;
+
+  function loadSavedDays() {
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") return parsed;
+      }
+    } catch (e) {}
+    return {};
+  }
+  const savedDays = loadSavedDays();
+
+  function persistSavedDays() {
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(savedDays));
+    } catch (e) {}
+  }
+
+  function todayKey() {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  function formatDayKey(key) {
+    const [y, m, d] = key.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+      weekday: "short", month: "short", day: "numeric", year: "numeric"
+    });
+  }
+
+  function refreshHistorySelect() {
+    const keys = Object.keys(savedDays).sort().reverse();
+    historySelect.innerHTML = "";
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = keys.length ? "View a saved date…" : "No saved dates yet";
+    historySelect.appendChild(placeholder);
+    keys.forEach(key => {
+      const opt = document.createElement("option");
+      opt.value = key;
+      opt.textContent = formatDayKey(key);
+      historySelect.appendChild(opt);
+    });
+    historySelect.disabled = keys.length === 0;
+    historySelect.value = viewingDayKey || "";
+  }
+
+  function renderHistoryView() {
+    const snap = savedDays[viewingDayKey];
+    if (!snap) {
+      exitHistoryView();
+      return;
+    }
+    historySections.innerHTML = "";
+    let total = 0;
+
+    snap.sections.forEach(section => {
+      total += section.entries.length;
+      const el = document.createElement("div");
+      el.className = "section";
+
+      const header = document.createElement("div");
+      header.className = "section-header";
+      const heading = document.createElement("h2");
+      heading.textContent = section.name;
+      header.appendChild(heading);
+      const count = document.createElement("span");
+      count.className = "section-count";
+      count.textContent = section.entries.length;
+      header.appendChild(count);
+      el.appendChild(header);
+
+      const entriesEl = document.createElement("div");
+      entriesEl.className = "entries";
+      if (section.entries.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "No packages";
+        entriesEl.appendChild(empty);
+      } else {
+        section.entries.forEach(entry => {
+          const row = document.createElement("div");
+          row.className = "entry";
+          if (entry.checked) row.classList.add("checked");
+          const check = document.createElement("input");
+          check.type = "checkbox";
+          check.className = "entry-check";
+          check.checked = !!entry.checked;
+          check.disabled = true;
+          row.appendChild(check);
+          row.appendChild(buildEntryLabel(entry));
+          entriesEl.appendChild(row);
+        });
+      }
+      el.appendChild(entriesEl);
+      historySections.appendChild(el);
+    });
+
+    const time = new Date(snap.savedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    historyBannerText.textContent =
+      `${formatDayKey(viewingDayKey)} · saved ${time} · ${total} ${total === 1 ? "entry" : "entries"} · read-only`;
+  }
+
+  function enterHistoryView(key) {
+    viewingDayKey = key;
+    document.body.classList.add("viewing-history");
+    historyBanner.hidden = false;
+    historySections.hidden = false;
+    renderHistoryView();
+    refreshHistorySelect();
+  }
+
+  function exitHistoryView() {
+    viewingDayKey = null;
+    document.body.classList.remove("viewing-history");
+    historyBanner.hidden = true;
+    historySections.hidden = true;
+    historySections.innerHTML = "";
+    refreshHistorySelect();
+  }
+
+  function saveToday() {
+    const total = state.sections.reduce((sum, s) => sum + s.entries.length, 0);
+    if (total === 0) return;
+    const key = todayKey();
+    const prev = savedDays[key];
+    savedDays[key] = { savedAt: Date.now(), sections: JSON.parse(JSON.stringify(state.sections)) };
+    persistSavedDays();
+    refreshHistorySelect();
+    showUndoToast({
+      message: `Saved ${formatDayKey(key)}${prev ? " (replaced earlier save)" : ""}`,
+      undo: () => {
+        if (prev) savedDays[key] = prev;
+        else delete savedDays[key];
+        persistSavedDays();
+        if (viewingDayKey === key && !savedDays[key]) exitHistoryView();
+        else if (viewingDayKey === key) renderHistoryView();
+        refreshHistorySelect();
+      }
+    });
+  }
+
+  saveDayBtn.addEventListener("click", saveToday);
+  historySelect.addEventListener("change", () => {
+    if (historySelect.value) enterHistoryView(historySelect.value);
+    else exitHistoryView();
+  });
+  document.getElementById("history-back").addEventListener("click", exitHistoryView);
+
   state.sections.forEach(s => sortSection(s.id));
+  refreshHistorySelect();
   render();
 })();
 </script>
