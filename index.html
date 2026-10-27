@@ -502,6 +502,19 @@
     font-size: 14px;
   }
   .history-banner span { flex: 1; }
+  .pdf-btn {
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .pdf-btn:hover { background: #eef1f5; }
+  .pdf-btn:disabled { opacity: 0.45; cursor: default; }
+  .pdf-btn:disabled:hover { background: #fff; }
   .history-back {
     padding: 6px 12px;
     border: 1px solid var(--border);
@@ -561,6 +574,7 @@
   <div class="history-bar">
     <button id="save-day" class="save-day" title="Save a snapshot of every section under today's date">Save today</button>
     <select id="history-select" class="history-select" aria-label="View a saved date"></select>
+    <button id="pdf-btn" class="pdf-btn" title="Download a PDF of the selected date">PDF</button>
   </div>
   <div id="history-banner" class="history-banner" hidden>
     <span id="history-banner-text"></span>
@@ -746,6 +760,7 @@
     delChecked.textContent = `Delete checked (${checkedCount})`;
 
     saveDayBtn.disabled = total === 0;
+    updatePdfBtn();
     saveDayBtn.title = total === 0
       ? "Nothing to save yet"
       : "Save a snapshot of every section under today's date";
@@ -1358,6 +1373,7 @@
     historySections.hidden = false;
     renderHistoryView();
     refreshHistorySelect();
+    updatePdfBtn();
   }
 
   function exitHistoryView() {
@@ -1367,6 +1383,7 @@
     historySections.hidden = true;
     historySections.innerHTML = "";
     refreshHistorySelect();
+    updatePdfBtn();
   }
 
   function saveToday() {
@@ -1390,6 +1407,193 @@
     });
   }
 
+  // ---- PDF export: built by hand (no libraries) using the built-in Helvetica fonts ----
+  // Helvetica-Bold glyph widths for ASCII 32..126, used only to truncate long notes.
+  const HELV_BOLD_WIDTHS = [
+    278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,
+    556,556,556,556,556,556,556,556,556,556,
+    333,333,584,584,584,611,975,
+    722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,
+    333,278,333,584,556,333,
+    556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,
+    389,280,389,584
+  ];
+  const WIN_ANSI_EXTRAS = { 0x2018: 0x91, 0x2019: 0x92, 0x201C: 0x93, 0x201D: 0x94, 0x2013: 0x96, 0x2014: 0x97, 0x2022: 0x95, 0x2026: 0x85, 0x20AC: 0x80 };
+
+  // Characters the built-in fonts can't draw (e.g. Korean) become "?".
+  function toWinAnsi(str) {
+    let out = "";
+    for (const ch of String(str)) {
+      let c = ch.codePointAt(0);
+      if (c === 0x202F || (c >= 0x2000 && c <= 0x200A)) c = 0x20;
+      if ((c >= 0x20 && c <= 0x7E) || (c >= 0xA0 && c <= 0xFF)) out += String.fromCharCode(c);
+      else if (WIN_ANSI_EXTRAS[c]) out += String.fromCharCode(WIN_ANSI_EXTRAS[c]);
+      else out += "?";
+    }
+    return out;
+  }
+
+  function pdfEscape(str) {
+    return str.replace(/[\\()]/g, m => "\\" + m);
+  }
+
+  function pdfWidth(str, size) {
+    let w = 0;
+    for (let i = 0; i < str.length; i++) {
+      const c = str.charCodeAt(i);
+      w += (c >= 32 && c <= 126) ? HELV_BOLD_WIDTHS[c - 32] : 556;
+    }
+    return w * size / 1000;
+  }
+
+  function buildPdf(subtitle, sections) {
+    const W = 612, H = 792, M = 40, COLS = 3, GAP = 10, ROW = 19, BOTTOM = 52;
+    const cellW = (W - 2 * M - GAP * (COLS - 1)) / COLS;
+    const DARK = "0.12 0.14 0.19", MUTED = "0.42 0.45 0.50", GRAY = "0.62 0.65 0.69";
+    const RED = "0.86 0.15 0.15", BLUE = "0.15 0.39 0.92";
+    const n = v => v.toFixed(2);
+    const esc = s => pdfEscape(toWinAnsi(s));
+
+    const pages = [];
+    let ops, y;
+    function newPage() {
+      ops = [];
+      pages.push(ops);
+      y = H - M;
+    }
+
+    function heading(name, count, continued) {
+      ops.push(
+        `BT /F2 12 Tf ${DARK} rg ${n(M)} ${n(y - 12)} Td (${esc(name.toUpperCase())}) Tj ` +
+        `/F1 10 Tf ${MUTED} rg (${esc("  (" + count + (continued ? ", continued" : "") + ")")}) Tj ET`
+      );
+      ops.push(`0.87 0.89 0.91 RG 0.8 w ${n(M)} ${n(y - 18)} m ${n(W - M)} ${n(y - 18)} l S`);
+      y -= 26;
+    }
+
+    function drawEntry(entry, x) {
+      const yb = y - 13;
+      ops.push(`${GRAY} RG 0.7 w ${n(x)} ${n(yb - 1.5)} 9 9 re S`);
+      if (entry.checked) {
+        ops.push(`${BLUE} RG 1.4 w ${n(x + 1.8)} ${n(yb + 3)} m ${n(x + 3.8)} ${n(yb + 0.8)} l ${n(x + 7.6)} ${n(yb + 6.4)} l S`);
+      }
+      const avail = cellW - 15 - 2;
+      let num = toWinAnsi(entry.qty > 1 ? `${entry.number}.${entry.qty}` : entry.number);
+      let label = entry.label ? toWinAnsi(" " + entry.label.toUpperCase()) : "";
+      while (num.length > 1 && pdfWidth(num, 11) > avail) num = num.slice(0, -1);
+      const wn = pdfWidth(num, 11);
+      if (label && wn + pdfWidth(label, 9) > avail) {
+        while (label.length > 1 && wn + pdfWidth(label + "...", 9) > avail) label = label.slice(0, -1);
+        label += "...";
+      }
+      const high = parseInt(entry.number, 10) >= 2000;
+      const numColor = entry.checked ? GRAY : (high ? RED : DARK);
+      const lblColor = entry.checked ? GRAY : BLUE;
+      ops.push(
+        `BT /F2 11 Tf ${numColor} rg ${n(x + 15)} ${n(yb)} Td (${pdfEscape(num)}) Tj ` +
+        `/F2 9 Tf ${lblColor} rg (${pdfEscape(label)}) Tj ET`
+      );
+    }
+
+    newPage();
+    ops.push(`BT /F2 20 Tf ${DARK} rg ${n(M)} ${n(y - 18)} Td (Mailbox Packages) Tj ET`);
+    y -= 28;
+    ops.push(`BT /F1 11 Tf ${MUTED} rg ${n(M)} ${n(y - 10)} Td (${esc(subtitle)}) Tj ET`);
+    y -= 24;
+
+    sections.forEach(section => {
+      const entries = section.entries;
+      const count = entries.length;
+      if (y - (26 + ROW) < BOTTOM) newPage();
+      heading(section.name, count, false);
+
+      if (count === 0) {
+        ops.push(`BT /F1 10 Tf ${MUTED} rg ${n(M)} ${n(y - 12)} Td (No packages) Tj ET`);
+        y -= 22;
+      }
+      for (let i = 0; i < count; i += COLS) {
+        if (y - ROW < BOTTOM) {
+          newPage();
+          heading(section.name, count, true);
+        }
+        entries.slice(i, i + COLS).forEach((entry, c) => drawEntry(entry, M + c * (cellW + GAP)));
+        y -= ROW;
+      }
+      y -= 12;
+    });
+
+    pages.forEach((pageOps, i) => {
+      pageOps.push(`BT /F1 9 Tf ${MUTED} rg ${n(M)} 26 Td (Page ${i + 1} of ${pages.length}) Tj ET`);
+    });
+
+    const objs = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      `<< /Type /Pages /Kids [${pages.map((_, i) => `${5 + 2 * i} 0 R`).join(" ")}] /Count ${pages.length} >>`,
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>"
+    ];
+    pages.forEach((pageOps, i) => {
+      const content = pageOps.join("\n");
+      objs.push(
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] ` +
+        `/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${6 + 2 * i} 0 R >>`
+      );
+      objs.push(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+    });
+
+    let pdf = "%PDF-1.4\n%\xE2\xE3\xCF\xD3\n";
+    const offsets = [];
+    objs.forEach((body, i) => {
+      offsets.push(pdf.length);
+      pdf += `${i + 1} 0 obj\n${body}\nendobj\n`;
+    });
+    const xrefPos = pdf.length;
+    pdf += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
+    offsets.forEach(o => { pdf += String(o).padStart(10, "0") + " 00000 n \n"; });
+    pdf += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`;
+
+    const bytes = new Uint8Array(pdf.length);
+    for (let i = 0; i < pdf.length; i++) bytes[i] = pdf.charCodeAt(i) & 0xFF;
+    return bytes;
+  }
+
+  function updatePdfBtn() {
+    const pdfBtn = document.getElementById("pdf-btn");
+    const liveTotal = state.sections.reduce((sum, s) => sum + s.entries.length, 0);
+    pdfBtn.disabled = !viewingDayKey && liveTotal === 0;
+    pdfBtn.title = viewingDayKey
+      ? `Download a PDF of ${formatDayKey(viewingDayKey)}`
+      : "Download a PDF of today's current list (pick a saved date first to export that day instead)";
+  }
+
+  function downloadPdf() {
+    let sections, subtitle, fileKey;
+    const snap = viewingDayKey && savedDays[viewingDayKey];
+    if (snap) {
+      sections = snap.sections;
+      const time = new Date(snap.savedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+      subtitle = `${formatDayKey(viewingDayKey)} - saved ${time}`;
+      fileKey = viewingDayKey;
+    } else {
+      sections = state.sections;
+      subtitle = `${formatDayKey(todayKey())} - current list`;
+      fileKey = todayKey();
+    }
+    const total = sections.reduce((sum, s) => sum + s.entries.length, 0);
+    subtitle += ` - ${total} ${total === 1 ? "entry" : "entries"}`;
+
+    const blob = new Blob([buildPdf(subtitle, sections)], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `mailbox-packages-${fileKey}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+
+  document.getElementById("pdf-btn").addEventListener("click", downloadPdf);
   saveDayBtn.addEventListener("click", saveToday);
   historySelect.addEventListener("change", () => {
     if (historySelect.value) enterHistoryView(historySelect.value);
