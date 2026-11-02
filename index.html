@@ -538,6 +538,70 @@
     white-space: nowrap;
   }
   .history-back:hover { background: #eef1f5; }
+  .close-day {
+    flex-basis: 100%;
+    padding: 9px 14px;
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .close-day:hover { background: #eaf1fe; }
+  .close-day:disabled { opacity: 0.45; cursor: default; }
+  .close-day:disabled:hover { background: #fff; }
+  .note-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0 0 10px;
+  }
+  .note-chip {
+    min-height: 30px;
+    padding: 4px 11px;
+    border: 1px solid var(--border);
+    border-radius: 15px;
+    background: #fff;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .note-chip.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .note-chips.idle .note-chip { opacity: 0.55; }
+  .footer-tools {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 24px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .footer-btn {
+    padding: 7px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .footer-btn:hover { background: #eef1f5; }
+  .backup-status {
+    flex-basis: 100%;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .viewing-history .close-day,
   .viewing-history #sections,
   .viewing-history .search-box,
   .viewing-history .delete-checked,
@@ -555,6 +619,8 @@
     .app-header { margin-bottom: 12px; }
     .entry .entry-check { width: 24px; height: 24px; }
     .entry .entry-check-wrap { width: 46px; }
+    .note-chip { min-height: 34px; padding: 4px 13px; font-size: 13px; }
+    .footer-btn { padding: 9px 14px; }
     h1 { font-size: 18px; }
     .total-count { font-size: 18px; }
     .sections {
@@ -588,6 +654,7 @@
     <button id="save-day" class="save-day" title="Save a snapshot of every section under today's date">Save today</button>
     <select id="history-select" class="history-select" aria-label="View a saved date"></select>
     <button id="pdf-btn" class="pdf-btn" title="Download a PDF of the selected date">PDF</button>
+    <button id="close-day" class="close-day" title="Save today's snapshot, then delete everything you've checked off">Close out day</button>
   </div>
   <div id="history-banner" class="history-banner" hidden>
     <span id="history-banner-text"></span>
@@ -599,6 +666,12 @@
   </div>
   <div class="sections" id="sections"></div>
   <div class="sections history-view" id="history-sections" hidden></div>
+  <div class="footer-tools">
+    <button id="backup-download" class="footer-btn" title="Save a copy of all your data as a file">Download backup</button>
+    <button id="backup-restore" class="footer-btn" title="Replace everything with a previously downloaded backup file">Restore backup</button>
+    <input id="backup-file" type="file" accept=".json,application/json" hidden>
+    <span id="backup-status" class="backup-status"></span>
+  </div>
   <div id="toast">
     <span id="toast-msg"></span>
     <button id="toast-undo">Undo</button>
@@ -644,10 +717,53 @@
     section.entries.forEach(e => { if (e.id >= nextEntryId) nextEntryId = e.id + 1; });
   });
 
+  const ACTIVE_KEY = "mailboxPackages_lastActive_v1";
+
   function save() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(ACTIVE_KEY, JSON.stringify({ day: todayKey(), at: Date.now() }));
     } catch (e) {}
+  }
+
+  // ---- quick-note chips: remember which notes get used most ----
+  const NOTE_COUNTS_KEY = "mailboxPackages_noteCounts_v1";
+  // USPS is the default carrier (no note means USPS), so it never gets a chip.
+  const SEED_NOTES = ["DHL", "UPS", "FEDEX"];
+  const NO_CHIP_NOTES = ["USPS"];
+
+  function loadNoteCounts() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(NOTE_COUNTS_KEY));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+    } catch (e) {}
+    return {};
+  }
+  let noteCounts = loadNoteCounts();
+
+  function persistNoteCounts() {
+    try {
+      localStorage.setItem(NOTE_COUNTS_KEY, JSON.stringify(noteCounts));
+    } catch (e) {}
+  }
+
+  function recordNoteUse(label) {
+    if (!label) return;
+    label.split(/\s+/).forEach(tok => {
+      if (tok) noteCounts[tok] = (noteCounts[tok] || 0) + 1;
+    });
+    persistNoteCounts();
+  }
+
+  function getQuickNotes() {
+    const seeds = SEED_NOTES.map((n, i) => ({ n, c: noteCounts[n] || 0, order: i }));
+    const learned = Object.keys(noteCounts)
+      .filter(n => !SEED_NOTES.includes(n) && !NO_CHIP_NOTES.includes(n) && noteCounts[n] >= 3 && n.length <= 10 && /^[A-Z0-9&.-]+$/.test(n))
+      .map(n => ({ n, c: noteCounts[n], order: 99 }));
+    return seeds.concat(learned)
+      .sort((a, b) => b.c - a.c || a.order - b.order)
+      .slice(0, 6)
+      .map(x => x.n);
   }
 
   function getSection(sectionId) {
@@ -773,6 +889,11 @@
     delChecked.textContent = `Delete checked (${checkedCount})`;
 
     saveDayBtn.disabled = total === 0;
+    const closeDayBtn = document.getElementById("close-day");
+    closeDayBtn.disabled = total === 0;
+    closeDayBtn.textContent = checkedCount > 0
+      ? `Close out day (saves, then clears ${checkedCount} checked)`
+      : "Close out day";
     updatePdfBtn();
     saveDayBtn.title = total === 0
       ? "Nothing to save yet"
@@ -858,6 +979,39 @@
     addRow.appendChild(input);
     addRow.appendChild(addBtn);
     el.appendChild(addRow);
+
+    const chipRow = document.createElement("div");
+    chipRow.className = "note-chips idle";
+    const chips = getQuickNotes().map(note => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "note-chip";
+      chip.textContent = note;
+      chip.title = "Type a mailbox # first, then tap to add this note";
+      chip.addEventListener("mousedown", e => e.preventDefault());
+      chip.addEventListener("click", () => toggleNote(note));
+      chipRow.appendChild(chip);
+      return chip;
+    });
+    const syncChips = () => {
+      const parts = input.value.trim().split(/\s+/).filter(Boolean);
+      const notes = parts.slice(1).map(t => t.toUpperCase());
+      chipRow.classList.toggle("idle", parts.length === 0);
+      chips.forEach(c => c.classList.toggle("active", notes.includes(c.textContent)));
+    };
+    const toggleNote = note => {
+      const parts = input.value.trim().split(/\s+/).filter(Boolean);
+      input.focus();
+      if (parts.length === 0) return;
+      const notes = parts.slice(1).map(t => t.toUpperCase());
+      const idx = notes.indexOf(note);
+      if (idx >= 0) notes.splice(idx, 1);
+      else notes.push(note);
+      input.value = [parts[0], ...notes].join(" ");
+      syncChips();
+    };
+    input.addEventListener("input", syncChips);
+    el.appendChild(chipRow);
 
     const entriesEl = document.createElement("div");
     entriesEl.className = "entries";
@@ -1156,6 +1310,7 @@
       entry.label = parsed.label;
     }
 
+    recordNoteUse(parsed.label);
     sortSection(sectionId);
     save();
     render();
@@ -1171,6 +1326,7 @@
     } else {
       list.push({ id: nextEntryId++, number: parsed.number, qty: parsed.qty || 1, label: parsed.label });
     }
+    recordNoteUse(parsed.label);
     sortSection(sectionId);
     save();
     render();
@@ -1201,7 +1357,7 @@
     });
   }
 
-  function deleteCheckedEntries() {
+  function takeCheckedEntries() {
     const removedBySection = [];
     state.sections.forEach(section => {
       const removed = section.entries.filter(e => e.checked);
@@ -1209,20 +1365,31 @@
       section.entries = section.entries.filter(e => !e.checked);
       removedBySection.push({ section, removed });
     });
+    return removedBySection;
+  }
+
+  function putBackEntries(removedBySection) {
+    removedBySection.forEach(({ section, removed }) => {
+      section.entries.push(...removed);
+      sortSection(section.id);
+    });
+  }
+
+  function countRemoved(removedBySection) {
+    return removedBySection.reduce((sum, r) => sum + r.removed.length, 0);
+  }
+
+  function deleteCheckedEntries() {
+    const removedBySection = takeCheckedEntries();
     if (removedBySection.length === 0) return;
 
-    const count = removedBySection.reduce((sum, r) => sum + r.removed.length, 0);
+    const count = countRemoved(removedBySection);
     save();
     render();
     showUndoToast({
       type: "checked",
       message: `Deleted ${count} checked ${count === 1 ? "entry" : "entries"}`,
-      undo: () => {
-        removedBySection.forEach(({ section, removed }) => {
-          section.entries.push(...removed);
-          sortSection(section.id);
-        });
-      }
+      undo: () => putBackEntries(removedBySection)
     });
   }
 
@@ -1233,6 +1400,7 @@
     const toast = document.getElementById("toast");
     const msg = document.getElementById("toast-msg");
     msg.textContent = action.message;
+    document.getElementById("toast-undo").hidden = !action.undo;
     toast.classList.add("show");
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => {
@@ -1241,8 +1409,12 @@
     }, 5000);
   }
 
+  function showMessage(text) {
+    showUndoToast({ message: text });
+  }
+
   document.getElementById("toast-undo").addEventListener("click", () => {
-    if (!pendingDelete) return;
+    if (!pendingDelete || !pendingDelete.undo) return;
     pendingDelete.undo();
     save();
     render();
@@ -1382,7 +1554,7 @@
 
     const time = new Date(snap.savedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
     historyBannerText.textContent =
-      `${formatDayKey(viewingDayKey)} · saved ${time} · ${total} ${total === 1 ? "entry" : "entries"} · read-only`;
+      `${formatDayKey(viewingDayKey)} · ${snap.auto ? "auto-saved" : "saved"} ${time} · ${total} ${total === 1 ? "entry" : "entries"} · read-only`;
   }
 
   function enterHistoryView(key) {
@@ -1591,7 +1763,7 @@
     if (snap) {
       sections = snap.sections;
       const time = new Date(snap.savedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-      subtitle = `${formatDayKey(viewingDayKey)} - saved ${time}`;
+      subtitle = `${formatDayKey(viewingDayKey)} - ${snap.auto ? "auto-saved" : "saved"} ${time}`;
       fileKey = viewingDayKey;
     } else {
       sections = state.sections;
@@ -1612,6 +1784,209 @@
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
 
+  // ---- close out day: save today's snapshot, then clear everything checked off ----
+  function closeOutDay() {
+    const total = state.sections.reduce((sum, s) => sum + s.entries.length, 0);
+    if (total === 0) return;
+    const key = todayKey();
+    const prev = savedDays[key];
+    savedDays[key] = { savedAt: Date.now(), sections: JSON.parse(JSON.stringify(state.sections)) };
+    persistSavedDays();
+    const removedBySection = takeCheckedEntries();
+    const cleared = countRemoved(removedBySection);
+    save();
+    refreshHistorySelect();
+    render();
+    showUndoToast({
+      message: `Closed out ${formatDayKey(key)}: saved ${total} ${total === 1 ? "entry" : "entries"}` +
+        (cleared ? `, cleared ${cleared} checked` : ""),
+      undo: () => {
+        putBackEntries(removedBySection);
+        if (prev) savedDays[key] = prev;
+        else delete savedDays[key];
+        persistSavedDays();
+        if (viewingDayKey === key && !savedDays[key]) exitHistoryView();
+        else if (viewingDayKey === key) renderHistoryView();
+        refreshHistorySelect();
+      }
+    });
+  }
+
+  // If the app is opened on a new day and the last day it was used was never saved,
+  // keep that day's final list as an auto-saved snapshot.
+  function maybeAutoSave() {
+    try {
+      const raw = localStorage.getItem(ACTIVE_KEY);
+      if (!raw) return;
+      const { day, at } = JSON.parse(raw);
+      if (typeof day !== "string" || day >= todayKey() || savedDays[day]) return;
+      const total = state.sections.reduce((sum, s) => sum + s.entries.length, 0);
+      if (total === 0) return;
+      savedDays[day] = { savedAt: at, auto: true, sections: JSON.parse(JSON.stringify(state.sections)) };
+      persistSavedDays();
+      refreshHistorySelect();
+      showMessage(`Auto-saved your list from ${formatDayKey(day)}`);
+    } catch (e) {}
+  }
+
+  // ---- backup / restore (a plain JSON file with everything in it) ----
+  const LAST_BACKUP_KEY = "mailboxPackages_lastBackup_v1";
+  const backupStatus = document.getElementById("backup-status");
+  const backupFile = document.getElementById("backup-file");
+
+  function refreshBackupStatus() {
+    let at = NaN;
+    try { at = parseInt(localStorage.getItem(LAST_BACKUP_KEY), 10); } catch (e) {}
+    if (Number.isFinite(at)) {
+      const d = new Date(at);
+      backupStatus.textContent = "Last backup downloaded " +
+        d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) + " at " +
+        d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    } else {
+      backupStatus.textContent = "No backup downloaded yet. Your data is stored only in this browser.";
+    }
+  }
+
+  function downloadBackup() {
+    const data = {
+      app: "mailbox-packages",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      state,
+      savedDays,
+      noteCounts
+    };
+    const blob = new Blob([JSON.stringify(data, null, 1)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `mailbox-packages-backup-${todayKey()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    try { localStorage.setItem(LAST_BACKUP_KEY, String(Date.now())); } catch (e) {}
+    refreshBackupStatus();
+  }
+
+  function cleanSections(rawSections) {
+    if (!Array.isArray(rawSections)) throw new Error("bad sections");
+    return rawSections.map(rs => {
+      if (!rs || typeof rs.name !== "string" || !Array.isArray(rs.entries)) throw new Error("bad section");
+      return {
+        id: 0,
+        name: rs.name,
+        entries: rs.entries.map(re => {
+          const num = re && (typeof re.number === "string" || typeof re.number === "number") ? String(re.number).trim() : "";
+          if (!num) throw new Error("bad entry");
+          const qty = parseInt(re.qty, 10);
+          return {
+            id: 0,
+            number: num,
+            qty: qty >= 1 ? qty : 1,
+            label: typeof re.label === "string" && re.label ? re.label : null,
+            checked: !!re.checked
+          };
+        })
+      };
+    });
+  }
+
+  function recomputeIds() {
+    nextSectionId = 1;
+    nextEntryId = 1;
+    state.sections.forEach(s => {
+      if (s.id >= nextSectionId) nextSectionId = s.id + 1;
+      s.entries.forEach(e => { if (e.id >= nextEntryId) nextEntryId = e.id + 1; });
+    });
+  }
+
+  function installData(sections, days, counts) {
+    if (viewingDayKey) exitHistoryView();
+    state = { sections };
+    Object.keys(savedDays).forEach(k => delete savedDays[k]);
+    Object.assign(savedDays, days);
+    noteCounts = counts;
+    moveSectionId = null;
+    recomputeIds();
+    state.sections.forEach(s => sortSection(s.id));
+    save();
+    persistSavedDays();
+    persistNoteCounts();
+    refreshHistorySelect();
+  }
+
+  function applyBackup(data) {
+    const newSections = cleanSections(data.state && data.state.sections);
+    let sid = 1, eid = 1;
+    newSections.forEach(s => {
+      s.id = sid++;
+      s.entries.forEach(e => { e.id = eid++; });
+    });
+
+    const newDays = {};
+    if (data.savedDays && typeof data.savedDays === "object") {
+      Object.keys(data.savedDays).forEach(key => {
+        const snap = data.savedDays[key];
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || !snap) return;
+        try {
+          newDays[key] = { savedAt: Number(snap.savedAt) || 0, auto: !!snap.auto, sections: cleanSections(snap.sections) };
+        } catch (e) {}
+      });
+    }
+
+    const newCounts = {};
+    if (data.noteCounts && typeof data.noteCounts === "object") {
+      Object.keys(data.noteCounts).forEach(k => {
+        const v = parseInt(data.noteCounts[k], 10);
+        if (v > 0) newCounts[k] = v;
+      });
+    }
+
+    const prevSections = JSON.parse(JSON.stringify(state.sections));
+    const prevDays = JSON.parse(JSON.stringify(savedDays));
+    const prevCounts = Object.assign({}, noteCounts);
+
+    installData(newSections, newDays, newCounts);
+    render();
+
+    const entryTotal = newSections.reduce((sum, s) => sum + s.entries.length, 0);
+    const dayCount = Object.keys(newDays).length;
+    showUndoToast({
+      message: `Restored backup: ${newSections.length} sections, ${entryTotal} entries, ${dayCount} saved ${dayCount === 1 ? "date" : "dates"}`,
+      undo: () => installData(prevSections, prevDays, prevCounts)
+    });
+  }
+
+  function restoreFromFile(file) {
+    file.text().then(text => {
+      let data;
+      try { data = JSON.parse(text); } catch (e) { data = null; }
+      if (!data || data.app !== "mailbox-packages" || !data.state) {
+        showMessage("That file isn't a Mailbox Packages backup.");
+        return;
+      }
+      try {
+        applyBackup(data);
+      } catch (e) {
+        showMessage("That backup file couldn't be read, so nothing was changed.");
+      }
+    }).catch(() => showMessage("Couldn't open that file."));
+  }
+
+  document.getElementById("backup-download").addEventListener("click", downloadBackup);
+  document.getElementById("backup-restore").addEventListener("click", () => backupFile.click());
+  backupFile.addEventListener("change", () => {
+    const file = backupFile.files[0];
+    backupFile.value = "";
+    if (file) restoreFromFile(file);
+  });
+
+  document.getElementById("close-day").addEventListener("click", closeOutDay);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) maybeAutoSave();
+  });
+
   document.getElementById("pdf-btn").addEventListener("click", downloadPdf);
   saveDayBtn.addEventListener("click", saveToday);
   historySelect.addEventListener("change", () => {
@@ -1622,6 +1997,8 @@
 
   state.sections.forEach(s => sortSection(s.id));
   refreshHistorySelect();
+  refreshBackupStatus();
+  maybeAutoSave();
   render();
 })();
 </script>
