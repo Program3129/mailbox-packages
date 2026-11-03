@@ -728,9 +728,7 @@
 
   // ---- quick-note chips: remember which notes get used most ----
   const NOTE_COUNTS_KEY = "mailboxPackages_noteCounts_v1";
-  // USPS is the default carrier (no note means USPS), so it never gets a chip.
-  const SEED_NOTES = ["DHL", "UPS", "FEDEX"];
-  const NO_CHIP_NOTES = ["USPS"];
+  const SEED_NOTES = ["DHL", "USPS", "UPS", "FEDEX"];
 
   function loadNoteCounts() {
     try {
@@ -758,7 +756,7 @@
   function getQuickNotes() {
     const seeds = SEED_NOTES.map((n, i) => ({ n, c: noteCounts[n] || 0, order: i }));
     const learned = Object.keys(noteCounts)
-      .filter(n => !SEED_NOTES.includes(n) && !NO_CHIP_NOTES.includes(n) && noteCounts[n] >= 3 && n.length <= 10 && /^[A-Z0-9&.-]+$/.test(n))
+      .filter(n => !SEED_NOTES.includes(n) && noteCounts[n] >= 3 && n.length <= 10 && /^[A-Z0-9&.-]+$/.test(n))
       .map(n => ({ n, c: noteCounts[n], order: 99 }));
     return seeds.concat(learned)
       .sort((a, b) => b.c - a.c || a.order - b.order)
