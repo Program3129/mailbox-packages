@@ -576,6 +576,29 @@
     color: #fff;
   }
   .note-chips.idle .note-chip { opacity: 0.55; }
+  .note-chip.over-chip {
+    background: #eaf1fe;
+    border-color: #b9cffb;
+    margin-left: auto;
+  }
+  .note-chip.over-chip.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .over-tag {
+    display: inline-block;
+    margin-left: 1px;
+    padding: 0 6px;
+    border-radius: 6px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.85em;
+    font-weight: 700;
+    line-height: 1.5;
+    vertical-align: 1px;
+  }
+  .entry.checked .over-tag { background: #9db9f5; }
   .footer-tools {
     display: flex;
     align-items: center;
@@ -714,7 +737,11 @@
   let state = loadState();
   state.sections.forEach(section => {
     if (section.id >= nextSectionId) nextSectionId = section.id + 1;
-    section.entries.forEach(e => { if (e.id >= nextEntryId) nextEntryId = e.id + 1; });
+    section.entries.forEach(e => {
+      if (e.id >= nextEntryId) nextEntryId = e.id + 1;
+      // counts above 10 from before this rule existed become "10+"
+      if (e.qty > 10) { e.qty = 10; e.over = true; }
+    });
   });
 
   const ACTIVE_KEY = "mailboxPackages_lastActive_v1";
@@ -774,27 +801,67 @@
   // mailbox number that then displays as "698.3.4" once incremented. Also
   // splits off any trailing free-text note (e.g. "113 usps dhl" -> number
   // "113", label "usps dhl") so it can be shown highlighted separately.
+  // A "10+" (or "+10") word, or a ".10+" / ".12" quantity, marks "more than 10
+  // packages": counting stops at 10 and the entry is flagged `over`.
   function parseNumberInput(raw) {
     const trimmed = raw.trim();
     const spaceIdx = trimmed.search(/\s/);
     let numberPart = trimmed;
     let label = null;
+    let over = false;
     if (spaceIdx !== -1) {
       numberPart = trimmed.slice(0, spaceIdx);
-      const rest = trimmed.slice(spaceIdx + 1).trim();
-      label = rest ? rest.toUpperCase() : null;
+      const kept = [];
+      trimmed.slice(spaceIdx + 1).trim().split(/\s+/).filter(Boolean).forEach(word => {
+        if (/^(10\+|\+10)$/.test(word)) over = true;
+        else kept.push(word);
+      });
+      label = kept.length ? kept.join(" ").toUpperCase() : null;
     }
 
+    let qty = null;
     const lastDot = numberPart.lastIndexOf(".");
     if (lastDot > 0 && lastDot < numberPart.length - 1) {
-      const base = numberPart.slice(0, lastDot);
-      const suffix = numberPart.slice(lastDot + 1);
-      if (/^\d+$/.test(suffix)) {
-        const qty = parseInt(suffix, 10);
-        if (qty >= 1) return { number: base, qty, label };
+      const match = /^(\d+)(\+?)$/.exec(numberPart.slice(lastDot + 1));
+      if (match) {
+        const q = parseInt(match[1], 10);
+        if (q >= 1) {
+          numberPart = numberPart.slice(0, lastDot);
+          qty = Math.min(q, 10);
+          if (match[2] || q > 10) over = true;
+        }
       }
     }
-    return { number: numberPart, qty: null, label };
+    if (over) qty = 10;
+    return { number: numberPart, qty, label, over };
+  }
+
+  const isOver = entry => !!entry.over || entry.qty > 10;
+  const shownQty = entry => Math.min(entry.qty, 10);
+
+  // Adds to a count, flipping to "10+" once it would pass 10.
+  function bumpQty(entry, amount) {
+    if (isOver(entry)) {
+      entry.over = true;
+      entry.qty = 10;
+      return;
+    }
+    const total = entry.qty + amount;
+    if (total > 10) {
+      entry.qty = 10;
+      entry.over = true;
+    } else {
+      entry.qty = total;
+    }
+  }
+
+  function mergeQty(target, qty, over) {
+    if (isOver(target) || over) {
+      target.over = true;
+      target.qty = 10;
+    } else {
+      bumpQty(target, qty);
+    }
   }
 
   function sortSection(sectionId) {
@@ -840,7 +907,8 @@
       const num = document.createElement("span");
       num.className = "sr-number";
       if (parseInt(entry.number, 10) >= 2000) num.classList.add("number-high");
-      num.textContent = entry.qty > 1 ? `${entry.number}.${entry.qty}` : entry.number;
+      num.textContent = isOver(entry) ? entry.number : (entry.qty > 1 ? `${entry.number}.${entry.qty}` : entry.number);
+      if (isOver(entry)) num.appendChild(makeOverTag());
       row.appendChild(num);
 
       if (entry.label) {
@@ -991,6 +1059,15 @@
       chipRow.appendChild(chip);
       return chip;
     });
+    const overChip = document.createElement("button");
+    overChip.type = "button";
+    overChip.className = "note-chip over-chip";
+    overChip.textContent = "10+";
+    overChip.title = "Type a mailbox # first, then tap to mark more than 10 packages";
+    overChip.addEventListener("mousedown", e => e.preventDefault());
+    overChip.addEventListener("click", () => toggleNote("10+"));
+    chipRow.appendChild(overChip);
+    chips.push(overChip);
     const syncChips = () => {
       const parts = input.value.trim().split(/\s+/).filter(Boolean);
       const notes = parts.slice(1).map(t => t.toUpperCase());
@@ -1109,10 +1186,10 @@
     source.entries.forEach(entry => {
       const existing = dest.entries.find(e => e.number === entry.number);
       if (existing) {
-        existing.qty += entry.qty;
+        mergeQty(existing, entry.qty, isOver(entry));
         if (entry.label) existing.label = entry.label;
       } else {
-        dest.entries.push({ id: nextEntryId++, number: entry.number, qty: entry.qty, label: entry.label, checked: entry.checked });
+        dest.entries.push({ id: nextEntryId++, number: entry.number, qty: shownQty(entry), over: isOver(entry), label: entry.label, checked: entry.checked });
       }
     });
     source.entries = [];
@@ -1256,13 +1333,13 @@
     const numberInput = document.createElement("input");
     numberInput.className = "number-field";
     numberInput.type = "text";
-    numberInput.value = entry.label ? `${entry.number} ${entry.label}` : entry.number;
+    numberInput.value = [entry.number, isOver(entry) ? "10+" : "", entry.label || ""].filter(Boolean).join(" ");
 
     const qtyInput = document.createElement("input");
     qtyInput.className = "qty-field";
     qtyInput.type = "number";
     qtyInput.min = "1";
-    qtyInput.value = entry.qty;
+    qtyInput.value = shownQty(entry);
 
     const saveBtn = document.createElement("button");
     saveBtn.className = "save";
@@ -1291,6 +1368,8 @@
       newQty = parseInt(newQtyRaw, 10);
       if (isNaN(newQty) || newQty < 1) newQty = 1;
     }
+    const newOver = parsed.over || newQty > 10;
+    newQty = newOver ? 10 : newQty;
 
     const list = getSection(sectionId).entries;
     const entry = list.find(e => e.id === id);
@@ -1298,13 +1377,14 @@
 
     const duplicate = list.find(e => e.id !== id && e.number === newNumber);
     if (duplicate) {
-      duplicate.qty += newQty;
+      mergeQty(duplicate, newQty, newOver);
       if (parsed.label) duplicate.label = parsed.label;
       const idx = list.indexOf(entry);
       list.splice(idx, 1);
     } else {
       entry.number = newNumber;
       entry.qty = newQty;
+      entry.over = newOver;
       entry.label = parsed.label;
     }
 
@@ -1319,10 +1399,11 @@
     const list = getSection(sectionId).entries;
     const existing = list.find(e => e.number === parsed.number);
     if (existing) {
-      existing.qty += 1;
+      bumpQty(existing, 1);
+      if (parsed.over) mergeQty(existing, 10, true);
       if (parsed.label) existing.label = parsed.label;
     } else {
-      list.push({ id: nextEntryId++, number: parsed.number, qty: parsed.qty || 1, label: parsed.label });
+      list.push({ id: nextEntryId++, number: parsed.number, qty: parsed.qty || 1, over: parsed.over, label: parsed.label });
     }
     recordNoteUse(parsed.label);
     sortSection(sectionId);
@@ -1333,7 +1414,14 @@
   function changeQty(sectionId, id, delta) {
     const entry = getSection(sectionId).entries.find(e => e.id === id);
     if (!entry) return;
-    entry.qty = Math.max(1, entry.qty + delta);
+    if (delta > 0) {
+      bumpQty(entry, delta);
+    } else if (isOver(entry)) {
+      entry.over = false;
+      entry.qty = 10;
+    } else {
+      entry.qty = Math.max(1, entry.qty + delta);
+    }
     save();
     render();
   }
@@ -1421,14 +1509,23 @@
     pendingDelete = null;
   });
 
+  function makeOverTag() {
+    const tag = document.createElement("span");
+    tag.className = "over-tag";
+    tag.textContent = ".10+";
+    tag.title = "More than 10 packages (not counted past 10)";
+    return tag;
+  }
+
   function buildEntryLabel(entry) {
     const label = document.createElement("div");
     label.className = "number";
 
     const numberSpan = document.createElement("span");
     if (parseInt(entry.number, 10) >= 2000) numberSpan.classList.add("number-high");
-    numberSpan.textContent = entry.qty > 1 ? `${entry.number}.${entry.qty}` : entry.number;
+    numberSpan.textContent = isOver(entry) ? entry.number : (entry.qty > 1 ? `${entry.number}.${entry.qty}` : entry.number);
     label.appendChild(numberSpan);
+    if (isOver(entry)) label.appendChild(makeOverTag());
 
     if (entry.label) {
       const labelSpan = document.createElement("span");
@@ -1660,17 +1757,20 @@
       y -= 26;
     }
 
-    function drawEntry(entry, x) {
-      const yb = y - 13;
+    function drawEntry(entry, x, top) {
+      const yb = top - 13;
       ops.push(`${GRAY} RG 0.7 w ${n(x)} ${n(yb - 1.5)} 9 9 re S`);
       if (entry.checked) {
         ops.push(`${BLUE} RG 1.4 w ${n(x + 1.8)} ${n(yb + 3)} m ${n(x + 3.8)} ${n(yb + 0.8)} l ${n(x + 7.6)} ${n(yb + 6.4)} l S`);
       }
       const avail = cellW - 15 - 2;
-      let num = toWinAnsi(entry.qty > 1 ? `${entry.number}.${entry.qty}` : entry.number);
+      const over = isOver(entry);
+      const overText = over ? ".10+" : "";
+      let num = toWinAnsi(over ? entry.number : (entry.qty > 1 ? `${entry.number}.${entry.qty}` : entry.number));
       let label = entry.label ? toWinAnsi(" " + entry.label.toUpperCase()) : "";
-      while (num.length > 1 && pdfWidth(num, 11) > avail) num = num.slice(0, -1);
-      const wn = pdfWidth(num, 11);
+      const wo = pdfWidth(overText, 11);
+      while (num.length > 1 && pdfWidth(num, 11) + wo > avail) num = num.slice(0, -1);
+      const wn = pdfWidth(num, 11) + wo;
       if (label && wn + pdfWidth(label, 9) > avail) {
         while (label.length > 1 && wn + pdfWidth(label + "...", 9) > avail) label = label.slice(0, -1);
         label += "...";
@@ -1680,6 +1780,7 @@
       const lblColor = entry.checked ? GRAY : BLUE;
       ops.push(
         `BT /F2 11 Tf ${numColor} rg ${n(x + 15)} ${n(yb)} Td (${pdfEscape(num)}) Tj ` +
+        (over ? `${entry.checked ? GRAY : BLUE} rg (${overText}) Tj ` : "") +
         `/F2 9 Tf ${lblColor} rg (${pdfEscape(label)}) Tj ET`
       );
     }
@@ -1700,13 +1801,24 @@
         ops.push(`BT /F1 10 Tf ${MUTED} rg ${n(M)} ${n(y - 12)} Td (No packages) Tj ET`);
         y -= 22;
       }
-      for (let i = 0; i < count; i += COLS) {
-        if (y - ROW < BOTTOM) {
+      // Numbers run down the first column, then continue at the top of the next one.
+      // The last block on a page is balanced so the columns end at about the same height.
+      let idx = 0;
+      while (idx < count) {
+        const availRows = Math.floor((y - BOTTOM) / ROW);
+        if (availRows < 1) {
           newPage();
           heading(section.name, count, true);
+          continue;
         }
-        entries.slice(i, i + COLS).forEach((entry, c) => drawEntry(entry, M + c * (cellW + GAP)));
-        y -= ROW;
+        const remaining = count - idx;
+        const rows = remaining <= COLS * availRows ? Math.ceil(remaining / COLS) : availRows;
+        const take = Math.min(remaining, COLS * rows);
+        entries.slice(idx, idx + take).forEach((entry, i) => {
+          drawEntry(entry, M + Math.floor(i / rows) * (cellW + GAP), y - (i % rows) * ROW);
+        });
+        y -= rows * ROW;
+        idx += take;
       }
       y -= 12;
     });
@@ -1878,10 +1990,12 @@
           const num = re && (typeof re.number === "string" || typeof re.number === "number") ? String(re.number).trim() : "";
           if (!num) throw new Error("bad entry");
           const qty = parseInt(re.qty, 10);
+          const over = !!re.over || qty > 10;
           return {
             id: 0,
             number: num,
-            qty: qty >= 1 ? qty : 1,
+            qty: over ? 10 : (qty >= 1 ? qty : 1),
+            over,
             label: typeof re.label === "string" && re.label ? re.label : null,
             checked: !!re.checked
           };
